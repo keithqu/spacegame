@@ -1,0 +1,28 @@
+{
+  "name": "space4x-game",
+  "version": "1.0.0",
+  "description": "A modern space strategy game with hybrid JS/C++ architecture",
+  "private": true,
+  "scripts": {
+    "install:all": "pnpm install",
+    "dev": "concurrently --names \"BACKEND,FRONTEND,ENGINE\" --prefix-colors \"blue,green,red\" \"pnpm run dev:backend\" \"pnpm run dev:frontend\" \"pnpm run dev:engine\"",
+    "dev:frontend": "cd frontend && pnpm start",
+    "dev:backend": "cd backend && pnpm dev",
+    "dev:engine": "cd game-engine && make dev && ./build/space4x-engine --mode service",
+    "build": "pnpm run build:engine && pnpm run build:backend && pnpm run build:frontend",
+    "build:frontend": "pnpm --filter frontend build",
+    "build:backend": "pnpm --filter backend build",
+    "build:engine": "cd game-engine && make release",
+    "start": "pnpm --filter backend start",
+    "start:all": "concurrently \"pnpm --filter backend start\" \"pnpm run start:engine\"",
+    "start:engine": "cd game-engine && make release && ./build/space4x-engine --mode service"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "packageManager": "pnpm@8.15.0"
+}
