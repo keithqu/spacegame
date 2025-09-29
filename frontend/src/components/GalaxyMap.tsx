@@ -46,25 +46,27 @@ export const GalaxyMap: React.FC<GalaxyMapProps> = ({
 
   // Render D3 visualization when galaxy changes
   useEffect(() => {
-    if (!galaxy || !svgRef.current) return;
+    if (!galaxy || !svgRef.current || !galaxy.config?.visualization) return;
 
     const svg = d3.select(svgRef.current);
-    const width = galaxy.config.visualization.width;
-    const height = galaxy.config.visualization.height;
+    const width = galaxy.config.visualization.width || 1200;
+    const height = galaxy.config.visualization.height || 800;
 
     // Clear previous content
     svg.selectAll('*').remove();
 
     // Set up scales with the configured scale factor
-    const scale = galaxy.config.visualization.scale;
-    const scaledRadius = galaxy.config.radius * scale;
+    const scale = galaxy.config.visualization?.scale || 3.0;
+    const scaledRadius = (galaxy.config.radius || 500) * scale;
+    
+    const radius = galaxy.config.radius || 500;
     
     const xScale = d3.scaleLinear()
-      .domain([-galaxy.config.radius, galaxy.config.radius])
+      .domain([-radius, radius])
       .range([width/2 - scaledRadius/2, width/2 + scaledRadius/2]);
 
     const yScale = d3.scaleLinear()
-      .domain([-galaxy.config.radius, galaxy.config.radius])
+      .domain([-radius, radius])
       .range([height/2 + scaledRadius/2, height/2 - scaledRadius/2]);
 
     // Create main group for zoom/pan
