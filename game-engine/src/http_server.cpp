@@ -167,6 +167,7 @@ GalaxyConfig SimpleHttpServer::parseSimpleGalaxyConfig(const std::string& json) 
     config.radius = extractDoubleValue(json, "radius", 500.0);
     config.starSystemCount = extractIntValue(json, "starSystemCount", 350);
     config.anomalyCount = extractIntValue(json, "anomalyCount", 50);
+    config.minDistance = extractDoubleValue(json, "minDistance", 2.0);
     
     // Set default fixed systems
     config.fixedSystems = {
@@ -175,8 +176,8 @@ GalaxyConfig SimpleHttpServer::parseSimpleGalaxyConfig(const std::string& json) 
         {"tau-ceti", "Tau Ceti", 8.5, 7.2, "major"}
     };
     
-    // Set default connectivity
-    config.connectivity = {1, 3, 8.0, 0.5};
+    // Set default connectivity - Voronoi-based with better connectivity
+    config.connectivity = {2, 5, 12.0, 0.3, true};  // Enable Voronoi connectivity
     
     // Set default visualization
     config.visualization = {1200, 800, 3.0};

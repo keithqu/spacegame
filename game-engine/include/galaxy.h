@@ -51,11 +51,19 @@ struct FixedSystem {
     std::string type;
 };
 
+struct VoronoiSite {
+    double x, y;  // Position
+    std::string systemId;  // Associated system ID (empty if no system)
+    std::vector<size_t> neighbors;  // Indices of neighboring sites
+    bool hasSystem;
+};
+
 struct GalaxyConfig {
     int seed;
     double radius;  // Light years
     int starSystemCount;
     int anomalyCount;
+    double minDistance;  // Minimum distance between objects (light years)
     
     std::vector<FixedSystem> fixedSystems;
     
@@ -64,6 +72,7 @@ struct GalaxyConfig {
         int maxConnections;
         double maxDistance;
         double distanceDecayFactor;
+        bool useVoronoiConnectivity;  // Use Voronoi-based connections
     } connectivity;
     
     struct {
@@ -101,11 +110,21 @@ class GalaxyGenerator {
 private:
     GalaxyConfig config;
     SeededRandom random;
+    std::vector<VoronoiSite> voronoiSites;
     
+    // Voronoi-based generation (new approach from original game)
+    std::vector<VoronoiSite> generateVoronoiSites(int numSites);
+    bool isValidVoronoiPosition(const std::pair<double, double>& pos, double minDistance);
+    void computeVoronoiNeighbors();
+    std::vector<StarSystem> generateSystemsFromVoronoi();
+    std::vector<WarpLane> generateVoronoiWarpLanes(std::vector<StarSystem>& systems);
+    
+    // Original generation methods (fallback)
     std::vector<StarSystem> generateStarSystems();
     std::vector<Anomaly> generateAnomalies(const std::vector<StarSystem>& systems);
     std::vector<WarpLane> generateWarpLanes(std::vector<StarSystem>& systems);
     
+    // Utility methods
     std::pair<double, double> generateRandomPositionInCircle();
     bool isPositionTooCloseToSystems(const std::pair<double, double>& pos, 
                                    const std::vector<StarSystem>& systems, 
@@ -116,6 +135,7 @@ private:
     double calculateDistance(const std::pair<double, double>& a, 
                            const std::pair<double, double>& b);
     
+    // Connection methods
     void createWarpLane(StarSystem& system1, StarSystem& system2, double distance,
                        std::vector<WarpLane>& warpLanes,
                        std::unordered_map<std::string, std::vector<std::string>>& connections);
@@ -126,6 +146,7 @@ private:
                                  std::vector<WarpLane>& warpLanes,
                                  std::unordered_map<std::string, std::vector<std::string>>& connections);
     
+    // Name and type generation
     std::string generateSystemName(int index);
     std::string generateAnomalyName(const std::string& type, int index);
     std::string determineSystemType(const std::pair<double, double>& position);

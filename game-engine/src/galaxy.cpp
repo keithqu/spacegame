@@ -14,14 +14,35 @@ GalaxyGenerator::GalaxyGenerator(const GalaxyConfig& cfg)
 Galaxy GalaxyGenerator::generateGalaxy() {
     std::cout << "🌌 Generating galaxy with seed: " << config.seed << std::endl;
     
-    // Generate star systems
-    auto systems = generateStarSystems();
+    std::vector<StarSystem> systems;
+    std::vector<WarpLane> warpLanes;
     
-    // Generate anomalies
+    if (config.connectivity.useVoronoiConnectivity) {
+        std::cout << "📐 Using Voronoi-based galaxy generation (like original game)" << std::endl;
+        
+        // Generate Voronoi sites
+        voronoiSites = generateVoronoiSites(config.starSystemCount);
+        
+        // Compute Voronoi neighbors
+        computeVoronoiNeighbors();
+        
+        // Generate systems from Voronoi sites
+        systems = generateSystemsFromVoronoi();
+        
+        // Generate warp lanes based on Voronoi connectivity
+        warpLanes = generateVoronoiWarpLanes(systems);
+    } else {
+        std::cout << "🔗 Using traditional distance-based galaxy generation" << std::endl;
+        
+        // Generate star systems
+        systems = generateStarSystems();
+        
+        // Generate warp lanes
+        warpLanes = generateWarpLanes(systems);
+    }
+    
+    // Generate anomalies (same for both approaches)
     auto anomalies = generateAnomalies(systems);
-    
-    // Generate warp lanes
-    auto warpLanes = generateWarpLanes(systems);
     
     Galaxy galaxy;
     galaxy.config = config;
@@ -180,26 +201,50 @@ std::vector<WarpLane> GalaxyGenerator::generateWarpLanes(std::vector<StarSystem>
         std::sort(candidates.begin(), candidates.end(), 
                  [](const auto& a, const auto& b) { return a.second < b.second; });
         
-        // Determine target connections
-        int targetConnections = random.intRange(config.connectivity.minConnections, 
-                                              config.connectivity.maxConnections);
+        // Determine target connections - more for central systems
+        double distanceFromOrigin = std::sqrt(system.x * system.x + system.y * system.y);
+        double normalizedDistanceFromOrigin = distanceFromOrigin / config.radius;
         
-        // Add connections with distance-based probability
+        // Central systems get more connections
+        int baseConnections = config.connectivity.minConnections;
+        int maxConnections = config.connectivity.maxConnections;
+        if (normalizedDistanceFromOrigin < 0.3) {
+            maxConnections += 2; // Core systems get up to 2 extra connections
+        }
+        
+        int targetConnections = random.intRange(baseConnections, maxConnections);
+        
+        // Phase 1a: Always connect to closest systems (guaranteed connectivity)
+        int guaranteedConnections = std::min(2, static_cast<int>(candidates.size()));
+        for (int i = 0; i < guaranteedConnections && i < static_cast<int>(candidates.size()); i++) {
+            const auto& candidate = candidates[i];
+            if (std::find(currentConnections.begin(), currentConnections.end(), 
+                         candidate.first->id) == currentConnections.end()) {
+                createWarpLane(system, *candidate.first, candidate.second, warpLanes, connections);
+            }
+        }
+        
+        // Phase 1b: Add additional connections with distance-based probability
         for (const auto& candidate : candidates) {
             if (static_cast<int>(currentConnections.size()) >= targetConnections) break;
             
             // Check if already connected
-            auto& otherConnections = connections[candidate.first->id];
             if (std::find(currentConnections.begin(), currentConnections.end(), 
                          candidate.first->id) != currentConnections.end()) {
                 continue;
             }
             
-            // Distance-based probability with penalty for long distances
+            // More generous probability for connections
             double normalizedDistance = candidate.second / config.connectivity.maxDistance;
             double probability = std::exp(-normalizedDistance * config.connectivity.distanceDecayFactor);
-            double distancePenalty = candidate.second > 6.0 ? 0.3 : 1.0;
-            double finalProbability = probability * distancePenalty;
+            
+            // Bonus for creating network diversity
+            double diversityBonus = 1.0;
+            if (connections[candidate.first->id].size() < 2) {
+                diversityBonus = 1.5; // Help isolated systems
+            }
+            
+            double finalProbability = probability * diversityBonus;
             
             if (random.next() < finalProbability) {
                 createWarpLane(system, *candidate.first, candidate.second, warpLanes, connections);
@@ -365,6 +410,228 @@ std::string GalaxyGenerator::generateAnomalyType() {
     }
     
     return "nebula";
+}
+
+// ============================================================================
+// VORONOI-BASED GALAXY GENERATION (from original game)
+// ============================================================================
+
+std::vector<VoronoiSite> GalaxyGenerator::generateVoronoiSites(int numSites) {
+    std::vector<VoronoiSite> sites;
+    sites.reserve(numSites);
+    
+    std::cout << "📐 Generating " << numSites << " Voronoi sites with min distance " << config.minDistance << " LY" << std::endl;
+    
+    for (int i = 0; i < numSites; i++) {
+        std::pair<double, double> pos;
+        int attempts = 0;
+        
+        do {
+            pos = generateRandomPositionInCircle();
+            attempts++;
+        } while (!isValidVoronoiPosition(pos, config.minDistance) && attempts < 500);
+        
+        if (attempts < 500) {
+            VoronoiSite site;
+            site.x = pos.first;
+            site.y = pos.second;
+            site.systemId = "";
+            site.hasSystem = false;
+            sites.push_back(site);
+        }
+    }
+    
+    std::cout << "✅ Generated " << sites.size() << " valid Voronoi sites" << std::endl;
+    return sites;
+}
+
+bool GalaxyGenerator::isValidVoronoiPosition(const std::pair<double, double>& pos, double minDistance) {
+    for (const auto& site : voronoiSites) {
+        if (calculateDistance(pos, {site.x, site.y}) < minDistance) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void GalaxyGenerator::computeVoronoiNeighbors() {
+    // Simple Delaunay triangulation approximation for neighbor relationships
+    // For each site, find nearby sites within a reasonable distance
+    
+    std::cout << "🔗 Computing Voronoi neighbor relationships..." << std::endl;
+    
+    for (size_t i = 0; i < voronoiSites.size(); i++) {
+        voronoiSites[i].neighbors.clear();
+        
+        // Find potential neighbors - be very generous to ensure connectivity
+        double maxNeighborDistance = config.radius * 0.5;  // Up to half the galaxy radius
+        
+        std::vector<std::pair<size_t, double>> candidates;
+        for (size_t j = 0; j < voronoiSites.size(); j++) {
+            if (i == j) continue;
+            
+            double dist = calculateDistance({voronoiSites[i].x, voronoiSites[i].y}, 
+                                          {voronoiSites[j].x, voronoiSites[j].y});
+            
+            if (dist <= maxNeighborDistance) {
+                candidates.push_back({j, dist});
+            }
+        }
+        
+        // Sort by distance and take closest 3-6 neighbors
+        std::sort(candidates.begin(), candidates.end(), 
+                 [](const auto& a, const auto& b) { return a.second < b.second; });
+        
+        int maxNeighbors = random.intRange(4, 8);  // Increased from 3-6 to 4-8
+        for (size_t k = 0; k < candidates.size() && k < static_cast<size_t>(maxNeighbors); k++) {
+            voronoiSites[i].neighbors.push_back(candidates[k].first);
+        }
+        
+        // Removed debug output for production
+    }
+    
+    // Make neighbor relationships symmetric
+    for (size_t i = 0; i < voronoiSites.size(); i++) {
+        for (size_t neighborIdx : voronoiSites[i].neighbors) {
+            auto& neighborNeighbors = voronoiSites[neighborIdx].neighbors;
+            if (std::find(neighborNeighbors.begin(), neighborNeighbors.end(), i) == neighborNeighbors.end()) {
+                neighborNeighbors.push_back(i);
+            }
+        }
+    }
+    
+    std::cout << "✅ Computed neighbor relationships for " << voronoiSites.size() << " sites" << std::endl;
+}
+
+std::vector<StarSystem> GalaxyGenerator::generateSystemsFromVoronoi() {
+    std::vector<StarSystem> systems;
+    
+    std::cout << "🌟 Assigning systems to Voronoi sites..." << std::endl;
+    
+    // First, place fixed systems at closest Voronoi sites
+    for (const auto& fixedSystem : config.fixedSystems) {
+        // Find closest Voronoi site
+        size_t closestSite = 0;
+        double minDistance = std::numeric_limits<double>::max();
+        
+        for (size_t i = 0; i < voronoiSites.size(); i++) {
+            if (voronoiSites[i].hasSystem) continue;
+            
+            double dist = calculateDistance({fixedSystem.x, fixedSystem.y}, 
+                                          {voronoiSites[i].x, voronoiSites[i].y});
+            if (dist < minDistance) {
+                minDistance = dist;
+                closestSite = i;
+            }
+        }
+        
+        // Assign system to this site
+        voronoiSites[closestSite].hasSystem = true;
+        voronoiSites[closestSite].systemId = fixedSystem.id;
+        
+        StarSystem system;
+        system.id = fixedSystem.id;
+        system.name = fixedSystem.name;
+        system.x = voronoiSites[closestSite].x;  // Use Voronoi site position
+        system.y = voronoiSites[closestSite].y;
+        system.type = fixedSystem.type;
+        system.isFixed = true;
+        system.explored = (fixedSystem.type == "origin");
+        system.population = (fixedSystem.type == "origin") ? 1000000 : 0;
+        system.resources.minerals = random.intRange(50, 200);
+        system.resources.energy = random.intRange(50, 200);
+        system.resources.research = random.intRange(50, 200);
+        
+        systems.push_back(system);
+        
+        std::cout << "  Fixed system: " << system.name << " at (" << system.x << ", " << system.y << ")" << std::endl;
+    }
+    
+    // Generate remaining systems at remaining Voronoi sites
+    int systemIndex = 1;
+    for (size_t i = 0; i < voronoiSites.size() && systems.size() < static_cast<size_t>(config.starSystemCount); i++) {
+        if (voronoiSites[i].hasSystem) continue;
+        
+        voronoiSites[i].hasSystem = true;
+        voronoiSites[i].systemId = "system-" + std::to_string(systemIndex);
+        
+        StarSystem system;
+        system.id = voronoiSites[i].systemId;
+        system.name = generateSystemName(systemIndex);
+        system.x = voronoiSites[i].x;
+        system.y = voronoiSites[i].y;
+        system.type = determineSystemType({system.x, system.y});
+        system.isFixed = false;
+        system.explored = false;
+        system.population = 0;
+        system.resources.minerals = random.intRange(10, 150);
+        system.resources.energy = random.intRange(10, 150);
+        system.resources.research = random.intRange(10, 150);
+        
+        systems.push_back(system);
+        systemIndex++;
+    }
+    
+    std::cout << "✅ Generated " << systems.size() << " star systems using Voronoi distribution" << std::endl;
+    return systems;
+}
+
+std::vector<WarpLane> GalaxyGenerator::generateVoronoiWarpLanes(std::vector<StarSystem>& systems) {
+    std::vector<WarpLane> warpLanes;
+    std::unordered_map<std::string, std::vector<std::string>> connections;
+    
+    std::cout << "🔗 Generating warp lanes using Voronoi connectivity..." << std::endl;
+    
+    // Initialize connection tracking
+    for (auto& system : systems) {
+        connections[system.id] = std::vector<std::string>();
+    }
+    
+    // Create warp lanes based on Voronoi neighbor relationships
+    int potentialLanes = 0;
+    int createdLanes = 0;
+    
+    for (size_t i = 0; i < voronoiSites.size(); i++) {
+        if (!voronoiSites[i].hasSystem) continue;
+        
+        for (size_t neighborIdx : voronoiSites[i].neighbors) {
+            if (neighborIdx >= voronoiSites.size() || !voronoiSites[neighborIdx].hasSystem) continue;
+            
+            // Only create each connection once (avoid duplicates)
+            if (i < neighborIdx) {
+                potentialLanes++;
+                
+                // Find the systems corresponding to these sites
+                StarSystem* system1 = nullptr;
+                StarSystem* system2 = nullptr;
+                
+                for (auto& sys : systems) {
+                    if (sys.id == voronoiSites[i].systemId) system1 = &sys;
+                    if (sys.id == voronoiSites[neighborIdx].systemId) system2 = &sys;
+                }
+                
+                if (system1 && system2) {
+                    double distance = calculateDistance({system1->x, system1->y}, {system2->x, system2->y});
+                    
+                    // For Voronoi connectivity, be more generous with distance
+                    double maxVoronoiDistance = config.connectivity.maxDistance * 1.5;
+                    
+                    if (distance <= maxVoronoiDistance) {
+                        createWarpLane(*system1, *system2, distance, warpLanes, connections);
+                        createdLanes++;
+                    }
+                }
+            }
+        }
+    }
+    
+    std::cout << "  Evaluated " << potentialLanes << " potential lanes, created " << createdLanes << std::endl;
+    
+    // Ensure minimum connectivity using traditional approach as fallback
+    ensureMinimumConnectivity(systems, warpLanes, connections);
+    
+    std::cout << "✅ Generated " << warpLanes.size() << " warp lanes using Voronoi method" << std::endl;
+    return warpLanes;
 }
 
 } // namespace space4x

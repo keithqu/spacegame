@@ -95,9 +95,15 @@ export const GalaxyMap: React.FC<GalaxyMapProps> = ({
     // Draw warp lanes first (so they appear behind systems)
     const warpLaneGroup = mainGroup.append('g').attr('class', 'warp-lanes');
     
-    warpLaneGroup.selectAll('line')
+    // Create warp lane lines with enhanced visibility
+    const warpLanes = warpLaneGroup.selectAll('g.warp-lane')
       .data(galaxy.warpLanes)
       .enter()
+      .append('g')
+      .attr('class', 'warp-lane');
+    
+    // Add glow effect for discovered lanes
+    warpLanes.filter(d => d.discovered)
       .append('line')
       .attr('x1', d => {
         const fromSystem = galaxy.systems.find(s => s.id === d.from);
@@ -115,9 +121,57 @@ export const GalaxyMap: React.FC<GalaxyMapProps> = ({
         const toSystem = galaxy.systems.find(s => s.id === d.to);
         return toSystem ? yScale(toSystem.y) : 0;
       })
-      .attr('stroke', d => d.discovered ? '#ffdd00' : '#666')
-      .attr('stroke-width', d => d.discovered ? 2 : 1.5)
-      .attr('opacity', d => d.discovered ? 0.9 : 0.5);
+      .attr('stroke', '#ffdd00')
+      .attr('stroke-width', 6)
+      .attr('opacity', 0.3)
+      .attr('filter', 'blur(2px)');
+    
+    // Main warp lane lines
+    warpLanes.append('line')
+      .attr('x1', d => {
+        const fromSystem = galaxy.systems.find(s => s.id === d.from);
+        return fromSystem ? xScale(fromSystem.x) : 0;
+      })
+      .attr('y1', d => {
+        const fromSystem = galaxy.systems.find(s => s.id === d.from);
+        return fromSystem ? yScale(fromSystem.y) : 0;
+      })
+      .attr('x2', d => {
+        const toSystem = galaxy.systems.find(s => s.id === d.to);
+        return toSystem ? xScale(toSystem.x) : 0;
+      })
+      .attr('y2', d => {
+        const toSystem = galaxy.systems.find(s => s.id === d.to);
+        return toSystem ? yScale(toSystem.y) : 0;
+      })
+      .attr('stroke', d => {
+        if (d.discovered) return '#ffdd00';
+        return d.distance <= 6 ? '#888' : '#555';
+      })
+      .attr('stroke-width', d => {
+        if (d.discovered) return 2.5;
+        return d.distance <= 6 ? 2 : 1.5;
+      })
+      .attr('opacity', d => d.discovered ? 0.9 : 0.6)
+      .attr('stroke-dasharray', d => d.discovered ? 'none' : '3,3')
+      .style('cursor', 'pointer')
+      .on('mouseover', function(event, d) {
+        d3.select(this)
+          .attr('stroke-width', d.discovered ? 4 : 3)
+          .attr('opacity', 1);
+        
+        // Show tooltip
+        const fromSystem = galaxy.systems.find(s => s.id === d.from);
+        const toSystem = galaxy.systems.find(s => s.id === d.to);
+        if (fromSystem && toSystem) {
+          console.log(`Warp Lane: ${fromSystem.name} ↔ ${toSystem.name} (${d.distance.toFixed(1)} LY)`);
+        }
+      })
+      .on('mouseout', function(event, d) {
+        d3.select(this)
+          .attr('stroke-width', d.discovered ? 2.5 : (d.distance <= 6 ? 2 : 1.5))
+          .attr('opacity', d.discovered ? 0.9 : 0.6);
+      });
 
     // Draw anomalies
     const anomalyGroup = mainGroup.append('g').attr('class', 'anomalies');
