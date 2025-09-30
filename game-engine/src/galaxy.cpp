@@ -5,6 +5,10 @@
 #include <sstream>
 #include <iomanip>
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 namespace space4x {
 
 GalaxyGenerator::GalaxyGenerator(const GalaxyConfig& cfg) 
@@ -39,6 +43,25 @@ Galaxy GalaxyGenerator::generateGalaxy() {
         
         // Generate warp lanes
         warpLanes = generateWarpLanes(systems);
+    }
+    
+    // Add strategic redundant connections (from original game)
+    // Build connections map from existing warp lanes
+    std::unordered_map<std::string, std::vector<std::string>> connections;
+    for (auto& system : systems) {
+        connections[system.id] = std::vector<std::string>();
+    }
+    
+    // Populate connections from existing warp lanes
+    for (const auto& lane : warpLanes) {
+        connections[lane.from].push_back(lane.to);
+        connections[lane.to].push_back(lane.from);
+    }
+    addRedundantConnections(systems, warpLanes, connections);
+    
+    // Update system connections after redundant connections
+    for (auto& system : systems) {
+        system.connections = connections[system.id];
     }
     
     // Generate anomalies (same for both approaches)
@@ -83,17 +106,80 @@ std::vector<StarSystem> GalaxyGenerator::generateStarSystems() {
     // Add fixed systems first
     for (const auto& fixedSystem : config.fixedSystems) {
         StarSystem system;
+        // Explicitly initialize all fields to avoid corruption
         system.id = fixedSystem.id;
         system.name = fixedSystem.name;
-        system.x = fixedSystem.x;
-        system.y = fixedSystem.y;
+        system.x = 0.0;
+        system.y = 0.0;
         system.type = fixedSystem.type;
         system.isFixed = true;
+        system.connections.clear();
         system.explored = (fixedSystem.type == "origin");
         system.population = (fixedSystem.type == "origin") ? 1000000 : 0;
+        system.gdp = system.population * random.range(0.8, 1.5);
+        
+        // Explicitly initialize resources
         system.resources.minerals = random.intRange(50, 200);
         system.resources.energy = random.intRange(50, 200);
         system.resources.research = random.intRange(50, 200);
+        
+        // Check if this is a predefined system
+        const SystemDefinition* detailedSystem = systemConfigManager.getSystemDefinition(fixedSystem.id);
+        if (detailedSystem) {
+            // Use detailed system data
+            system.systemInfo.starType = detailedSystem->starType;
+            system.systemInfo.planetCount = detailedSystem->planets.size();
+            
+            // Count moons
+            int totalMoons = 0;
+            for (const auto& planet : detailedSystem->planets) {
+                totalMoons += planet.moons.size();
+            }
+            system.systemInfo.moonCount = totalMoons;
+            system.systemInfo.asteroidCount = detailedSystem->asteroids.size();
+            system.detailedSystem = detailedSystem;
+        } else {
+            // Use random generation
+            std::vector<std::string> starTypes = {"G-class", "K-class", "M-class", "F-class", "A-class"};
+            int starTypeIndex = random.intRange(0, starTypes.size() - 1);
+            system.systemInfo.starType = starTypes[starTypeIndex];
+            system.systemInfo.planetCount = random.intRange(2, 12);
+            system.systemInfo.moonCount = random.intRange(0, system.systemInfo.planetCount * 3);
+            system.systemInfo.asteroidCount = random.intRange(100, 5000);
+            system.detailedSystem = nullptr;
+        }
+        
+        // Debug output for fixed systems
+        std::cout << "  " << system.name << " system info: " 
+                 << "star=" << system.systemInfo.starType
+                 << " planets=" << system.systemInfo.planetCount 
+                 << " moons=" << system.systemInfo.moonCount
+                 << " asteroids=" << system.systemInfo.asteroidCount
+                 << " gdp=" << system.gdp << std::endl;
+        
+        if (fixedSystem.hasFixedPosition) {
+            // Use exact coordinates for real star systems
+            system.x = fixedSystem.x;
+            system.y = fixedSystem.y;
+        } else {
+            // Generate position within distance constraint for fictional systems
+            double targetDist = fixedSystem.targetDistance;
+            double tolerance = fixedSystem.distanceTolerance;
+            double minDist = targetDist - tolerance;
+            double maxDist = targetDist + tolerance;
+            
+            // Generate random position within the distance range
+            double distance = random.range(minDist, maxDist);
+            double angle = random.range(0, 2 * M_PI);
+            
+            system.x = distance * std::cos(angle);
+            system.y = distance * std::sin(angle);
+            
+            std::cout << "  Placed " << system.name << " at distance " 
+                     << std::sqrt(system.x * system.x + system.y * system.y) 
+                     << " LY (target: " << targetDist << " ± " << tolerance << ")" << std::endl;
+        }
+        
         systems.push_back(system);
     }
     
@@ -112,17 +198,37 @@ std::vector<StarSystem> GalaxyGenerator::generateStarSystems() {
                 isPositionTooCloseToSystems(position, systems, 2.0));
         
         StarSystem system;
+        // Explicitly initialize all fields to avoid corruption
         system.id = "system-" + std::to_string(i + 1);
         system.name = generateSystemName(i + 1);
         system.x = position.first;
         system.y = position.second;
         system.type = determineSystemType(position);
         system.isFixed = false;
+        system.connections.clear();
         system.explored = false;
         system.population = 0;
+        system.gdp = 0.0;
+        
+        // Explicitly initialize resources
         system.resources.minerals = random.intRange(10, 150);
         system.resources.energy = random.intRange(10, 150);
         system.resources.research = random.intRange(10, 150);
+        
+        // Generate random system using new rules
+        SystemDefinition randomSystemDef = systemConfigManager.generateRandomSystem(system.id, system.name);
+        system.systemInfo.starType = randomSystemDef.starType;
+        system.systemInfo.planetCount = randomSystemDef.planets.size();
+        
+        // Count moons from generated system
+        int totalMoons = 0;
+        for (const auto& planet : randomSystemDef.planets) {
+            totalMoons += planet.moons.size();
+        }
+        system.systemInfo.moonCount = totalMoons;
+        system.systemInfo.asteroidCount = random.intRange(0, 5); // Few asteroids for random systems
+        system.detailedSystem = nullptr; // Random systems don't store detailed data
+        
         systems.push_back(system);
     }
     
@@ -354,12 +460,93 @@ void GalaxyGenerator::ensureMinimumConnectivity(std::vector<StarSystem>& systems
 void GalaxyGenerator::ensureNetworkConnectivity(std::vector<StarSystem>& systems,
                                               std::vector<WarpLane>& warpLanes,
                                               std::unordered_map<std::string, std::vector<std::string>>& connections) {
-    // Simple connectivity check - could be improved with Union-Find
-    // For now, just ensure no completely isolated systems
-    for (auto& system : systems) {
-        if (connections[system.id].empty()) {
-            std::cout << "⚠️ Warning: System " << system.name << " remains isolated" << std::endl;
+    std::cout << "🌉 Ensuring network connectivity using MST approach..." << std::endl;
+    
+    if (systems.size() < 2) return;
+    
+    // Create mapping from system ID to index for union-find
+    std::unordered_map<std::string, size_t> systemToIndex;
+    for (size_t i = 0; i < systems.size(); i++) {
+        systemToIndex[systems[i].id] = i;
+    }
+    
+    // Union-Find data structures
+    std::vector<size_t> parent(systems.size());
+    std::vector<size_t> rank(systems.size(), 0);
+    
+    // Initialize union-find
+    for (size_t i = 0; i < systems.size(); i++) {
+        parent[i] = i;
+    }
+    
+    // Find function for union-find
+    std::function<size_t(size_t)> find = [&](size_t x) -> size_t {
+        if (parent[x] != x) {
+            parent[x] = find(parent[x]);
         }
+        return parent[x];
+    };
+    
+    // Union function for union-find
+    auto unite = [&](size_t x, size_t y) -> bool {
+        size_t px = find(x);
+        size_t py = find(y);
+        if (px == py) return false;
+        
+        if (rank[px] < rank[py]) {
+            parent[px] = py;
+        } else if (rank[px] > rank[py]) {
+            parent[py] = px;
+        } else {
+            parent[py] = px;
+            rank[px]++;
+        }
+        return true;
+    };
+    
+    // Mark existing connections in union-find
+    for (const auto& lane : warpLanes) {
+        auto it1 = systemToIndex.find(lane.from);
+        auto it2 = systemToIndex.find(lane.to);
+        
+        if (it1 != systemToIndex.end() && it2 != systemToIndex.end()) {
+            unite(it1->second, it2->second);
+        }
+    }
+    
+    // Find disconnected components and connect them with minimal bridges
+    std::vector<std::pair<double, std::pair<size_t, size_t>>> bridgeEdges;
+    
+    // Only consider edges between different components
+    for (size_t i = 0; i < systems.size(); i++) {
+        for (size_t j = i + 1; j < systems.size(); j++) {
+            if (find(i) != find(j)) { // Different components
+                double dist = calculateDistance({systems[i].x, systems[i].y},
+                                              {systems[j].x, systems[j].y});
+                bridgeEdges.push_back({dist, {i, j}});
+            }
+        }
+    }
+    
+    // Sort by distance to prefer shorter bridge connections
+    std::sort(bridgeEdges.begin(), bridgeEdges.end());
+    
+    int bridgesAdded = 0;
+    for (const auto& edge : bridgeEdges) {
+        size_t u = edge.second.first;
+        size_t v = edge.second.second;
+        
+        // Only add if this connection bridges different components
+        if (unite(u, v)) {
+            createWarpLane(systems[u], systems[v], edge.first, warpLanes, connections);
+            bridgesAdded++;
+            std::cout << "  Added bridge lane: " << systems[u].name << " ↔ " << systems[v].name 
+                     << " (" << edge.first << " LY)" << std::endl;
+        }
+    }
+    
+    if (bridgesAdded > 0) {
+        std::cout << "  Added " << bridgesAdded << " bridge connections to ensure full connectivity" << std::endl;
     }
 }
 
@@ -388,11 +575,10 @@ std::string GalaxyGenerator::generateAnomalyName(const std::string& type, int in
 
 std::string GalaxyGenerator::determineSystemType(const std::pair<double, double>& position) {
     double distanceFromOrigin = std::sqrt(position.first * position.first + position.second * position.second);
-    double normalizedDistance = distanceFromOrigin / config.radius;
     
-    if (normalizedDistance < 0.3) return "major";
-    if (normalizedDistance < 0.7) return "minor";
-    return "frontier";
+    // Systems up to 300 LY from origin are considered "core" for connectivity purposes
+    if (distanceFromOrigin <= 300.0) return "core";
+    return "rim";
 }
 
 std::string GalaxyGenerator::generateAnomalyType() {
@@ -420,7 +606,10 @@ std::vector<VoronoiSite> GalaxyGenerator::generateVoronoiSites(int numSites) {
     std::vector<VoronoiSite> sites;
     sites.reserve(numSites);
     
-    std::cout << "📐 Generating " << numSites << " Voronoi sites with min distance " << config.minDistance << " LY" << std::endl;
+    std::cout << "📐 Generating " << numSites << " Voronoi sites (original game approach)" << std::endl;
+    
+    // Use original game's simple approach: uniform distribution with only minimum distance
+    const double minDistance = 2.5;  // Minimum distance between any two systems (slightly more than original 2.0)
     
     for (int i = 0; i < numSites; i++) {
         std::pair<double, double> pos;
@@ -429,7 +618,7 @@ std::vector<VoronoiSite> GalaxyGenerator::generateVoronoiSites(int numSites) {
         do {
             pos = generateRandomPositionInCircle();
             attempts++;
-        } while (!isValidVoronoiPosition(pos, config.minDistance) && attempts < 500);
+        } while (!isValidVoronoiPosition(pos, minDistance) && attempts < 500);
         
         if (attempts < 500) {
             VoronoiSite site;
@@ -441,7 +630,7 @@ std::vector<VoronoiSite> GalaxyGenerator::generateVoronoiSites(int numSites) {
         }
     }
     
-    std::cout << "✅ Generated " << sites.size() << " valid Voronoi sites" << std::endl;
+    std::cout << "✅ Generated " << sites.size() << " Voronoi sites using original game distribution" << std::endl;
     return sites;
 }
 
@@ -455,39 +644,46 @@ bool GalaxyGenerator::isValidVoronoiPosition(const std::pair<double, double>& po
 }
 
 void GalaxyGenerator::computeVoronoiNeighbors() {
-    // Simple Delaunay triangulation approximation for neighbor relationships
-    // For each site, find nearby sites within a reasonable distance
+    std::cout << "🔗 Computing Voronoi neighbor relationships (original game approach)..." << std::endl;
     
-    std::cout << "🔗 Computing Voronoi neighbor relationships..." << std::endl;
+    // Clear existing neighbor relationships
+    for (auto& site : voronoiSites) {
+        site.neighbors.clear();
+    }
     
+    // Use original game's conservative approach: connect each site to only 1-3 closest neighbors
     for (size_t i = 0; i < voronoiSites.size(); i++) {
-        voronoiSites[i].neighbors.clear();
+        std::vector<std::pair<double, size_t>> distances;
         
-        // Find potential neighbors - be very generous to ensure connectivity
-        double maxNeighborDistance = config.radius * 0.5;  // Up to half the galaxy radius
-        
-        std::vector<std::pair<size_t, double>> candidates;
+        // Calculate distances to all other sites
         for (size_t j = 0; j < voronoiSites.size(); j++) {
-            if (i == j) continue;
-            
-            double dist = calculateDistance({voronoiSites[i].x, voronoiSites[i].y}, 
-                                          {voronoiSites[j].x, voronoiSites[j].y});
-            
-            if (dist <= maxNeighborDistance) {
-                candidates.push_back({j, dist});
+            if (i != j) {
+                double dist = calculateDistance({voronoiSites[i].x, voronoiSites[i].y},
+                                              {voronoiSites[j].x, voronoiSites[j].y});
+                distances.push_back({dist, j});
             }
         }
         
-        // Sort by distance and take closest 3-6 neighbors
-        std::sort(candidates.begin(), candidates.end(), 
-                 [](const auto& a, const auto& b) { return a.second < b.second; });
+        // Sort by distance
+        std::sort(distances.begin(), distances.end());
         
-        int maxNeighbors = random.intRange(4, 8);  // Increased from 3-6 to 4-8
-        for (size_t k = 0; k < candidates.size() && k < static_cast<size_t>(maxNeighbors); k++) {
-            voronoiSites[i].neighbors.push_back(candidates[k].first);
+        // Create initial connections - connect to more neighbors for better connectivity
+        int maxConnections = std::min(6, static_cast<int>(distances.size()));  // Up to 6 instead of 3
+        
+        // Connect to closest neighbors to ensure good connectivity
+        
+        for (int k = 0; k < maxConnections && k < static_cast<int>(distances.size()); k++) {
+            size_t neighborIdx = distances[k].second;
+            double dist = distances[k].first;
+            
+            // Always connect to the closest neighbors to ensure connectivity
+            // Only skip if distance is truly unreasonable (> full galaxy diameter)
+            if (dist <= config.radius * 2.0) {
+                voronoiSites[i].neighbors.push_back(neighborIdx);
+            }
         }
         
-        // Removed debug output for production
+        // Debug output removed for production
     }
     
     // Make neighbor relationships symmetric
@@ -500,7 +696,7 @@ void GalaxyGenerator::computeVoronoiNeighbors() {
         }
     }
     
-    std::cout << "✅ Computed neighbor relationships for " << voronoiSites.size() << " sites" << std::endl;
+    std::cout << "✅ Computed conservative neighbor relationships for " << voronoiSites.size() << " sites" << std::endl;
 }
 
 std::vector<StarSystem> GalaxyGenerator::generateSystemsFromVoronoi() {
@@ -510,14 +706,39 @@ std::vector<StarSystem> GalaxyGenerator::generateSystemsFromVoronoi() {
     
     // First, place fixed systems at closest Voronoi sites
     for (const auto& fixedSystem : config.fixedSystems) {
-        // Find closest Voronoi site
+        double systemX, systemY;
+        
+        if (fixedSystem.hasFixedPosition) {
+            // Use exact coordinates for real star systems
+            systemX = fixedSystem.x;
+            systemY = fixedSystem.y;
+        } else {
+            // Generate position within distance constraint for fictional systems
+            double targetDist = fixedSystem.targetDistance;
+            double tolerance = fixedSystem.distanceTolerance;
+            double minDist = targetDist - tolerance;
+            double maxDist = targetDist + tolerance;
+            
+            // Generate random position within the distance range
+            double distance = random.range(minDist, maxDist);
+            double angle = random.range(0, 2 * M_PI);
+            
+            systemX = distance * std::cos(angle);
+            systemY = distance * std::sin(angle);
+            
+            std::cout << "  Placed " << fixedSystem.name << " at distance " 
+                     << std::sqrt(systemX * systemX + systemY * systemY) 
+                     << " LY (target: " << targetDist << " ± " << tolerance << ")" << std::endl;
+        }
+        
+        // Find closest Voronoi site to the system position
         size_t closestSite = 0;
         double minDistance = std::numeric_limits<double>::max();
         
         for (size_t i = 0; i < voronoiSites.size(); i++) {
             if (voronoiSites[i].hasSystem) continue;
             
-            double dist = calculateDistance({fixedSystem.x, fixedSystem.y}, 
+            double dist = calculateDistance({systemX, systemY}, 
                                           {voronoiSites[i].x, voronoiSites[i].y});
             if (dist < minDistance) {
                 minDistance = dist;
@@ -530,17 +751,47 @@ std::vector<StarSystem> GalaxyGenerator::generateSystemsFromVoronoi() {
         voronoiSites[closestSite].systemId = fixedSystem.id;
         
         StarSystem system;
+        // Explicitly initialize all fields to avoid corruption
         system.id = fixedSystem.id;
         system.name = fixedSystem.name;
-        system.x = voronoiSites[closestSite].x;  // Use Voronoi site position
-        system.y = voronoiSites[closestSite].y;
+        system.x = systemX;  // Use calculated position (not Voronoi site position)
+        system.y = systemY;
         system.type = fixedSystem.type;
         system.isFixed = true;
+        system.connections.clear();
         system.explored = (fixedSystem.type == "origin");
         system.population = (fixedSystem.type == "origin") ? 1000000 : 0;
+        system.gdp = system.population * random.range(0.8, 1.5);
+        
+        // Explicitly initialize resources
         system.resources.minerals = random.intRange(50, 200);
         system.resources.energy = random.intRange(50, 200);
         system.resources.research = random.intRange(50, 200);
+        
+        // Check if this is a predefined system
+        const SystemDefinition* detailedSystem = systemConfigManager.getSystemDefinition(fixedSystem.id);
+        if (detailedSystem) {
+            // Use detailed system data
+            system.systemInfo.starType = detailedSystem->starType;
+            system.systemInfo.planetCount = detailedSystem->planets.size();
+            
+            // Count moons
+            int totalMoons = 0;
+            for (const auto& planet : detailedSystem->planets) {
+                totalMoons += planet.moons.size();
+            }
+            system.systemInfo.moonCount = totalMoons;
+            system.systemInfo.asteroidCount = detailedSystem->asteroids.size();
+            system.detailedSystem = detailedSystem;
+        } else {
+            // Use random generation
+            std::vector<std::string> starTypes = {"G-class", "K-class", "M-class", "F-class", "A-class"};
+            system.systemInfo.starType = starTypes[random.intRange(0, starTypes.size() - 1)];
+            system.systemInfo.planetCount = random.intRange(4, 10); // Updated to new rules
+            system.systemInfo.moonCount = random.intRange(0, system.systemInfo.planetCount / 2);
+            system.systemInfo.asteroidCount = random.intRange(0, 5);
+            system.detailedSystem = nullptr;
+        }
         
         systems.push_back(system);
         
@@ -556,17 +807,46 @@ std::vector<StarSystem> GalaxyGenerator::generateSystemsFromVoronoi() {
         voronoiSites[i].systemId = "system-" + std::to_string(systemIndex);
         
         StarSystem system;
+        // Explicitly initialize all fields to avoid corruption
         system.id = voronoiSites[i].systemId;
         system.name = generateSystemName(systemIndex);
         system.x = voronoiSites[i].x;
         system.y = voronoiSites[i].y;
         system.type = determineSystemType({system.x, system.y});
         system.isFixed = false;
+        system.connections.clear();
         system.explored = false;
         system.population = 0;
+        system.gdp = 0.0;
+        
+        // Explicitly initialize resources
         system.resources.minerals = random.intRange(10, 150);
         system.resources.energy = random.intRange(10, 150);
         system.resources.research = random.intRange(10, 150);
+        
+        // Generate random system using new rules
+        SystemDefinition randomSystemDef = systemConfigManager.generateRandomSystem(system.id, system.name);
+        system.systemInfo.starType = randomSystemDef.starType;
+        system.systemInfo.planetCount = randomSystemDef.planets.size();
+        
+        // Count moons from generated system
+        int totalMoons = 0;
+        for (const auto& planet : randomSystemDef.planets) {
+            totalMoons += planet.moons.size();
+        }
+        system.systemInfo.moonCount = totalMoons;
+        system.systemInfo.asteroidCount = random.intRange(0, 5); // Few asteroids for random systems
+        system.detailedSystem = nullptr; // Random systems don't store detailed data
+        
+        // Debug output for first few systems
+        if (systemIndex <= 7) {
+            std::cout << "  " << system.name << " (Voronoi) system info: " 
+                     << "star=" << system.systemInfo.starType
+                     << " planets=" << system.systemInfo.planetCount 
+                     << " moons=" << system.systemInfo.moonCount
+                     << " asteroids=" << system.systemInfo.asteroidCount
+                     << " gdp=" << system.gdp << std::endl;
+        }
         
         systems.push_back(system);
         systemIndex++;
@@ -613,8 +893,13 @@ std::vector<WarpLane> GalaxyGenerator::generateVoronoiWarpLanes(std::vector<Star
                 if (system1 && system2) {
                     double distance = calculateDistance({system1->x, system1->y}, {system2->x, system2->y});
                     
-                    // For Voronoi connectivity, be more generous with distance
-                    double maxVoronoiDistance = config.connectivity.maxDistance * 1.5;
+                    // Calculate base distance threshold
+                    double baseVoronoiDistance = config.connectivity.maxDistance * 1.5;
+                    double galaxyScaledDistance = config.radius * 0.25;  // 25% of galaxy radius
+                    double baseMaxDistance = std::max(baseVoronoiDistance, galaxyScaledDistance);
+                    
+                    // Apply tiered connectivity based on system types
+                    double maxVoronoiDistance = calculateTieredDistance(system1, system2, baseMaxDistance);
                     
                     if (distance <= maxVoronoiDistance) {
                         createWarpLane(*system1, *system2, distance, warpLanes, connections);
@@ -632,6 +917,141 @@ std::vector<WarpLane> GalaxyGenerator::generateVoronoiWarpLanes(std::vector<Star
     
     std::cout << "✅ Generated " << warpLanes.size() << " warp lanes using Voronoi method" << std::endl;
     return warpLanes;
+}
+
+void GalaxyGenerator::addRedundantConnections(std::vector<StarSystem>& systems,
+                                            std::vector<WarpLane>& warpLanes,
+                                            std::unordered_map<std::string, std::vector<std::string>>& connections) {
+    std::cout << "🔗 Adding strategic redundant connections..." << std::endl;
+    
+    if (systems.size() < 3) {
+        std::cout << "  Not enough systems for redundant connections." << std::endl;
+        return;
+    }
+    
+    // Find vulnerable systems (systems with 1-2 connections or far from center)
+    std::vector<StarSystem*> vulnerableSystems;
+    double centerX = 0, centerY = 0;
+    
+    // Calculate galaxy center
+    for (const auto& system : systems) {
+        centerX += system.x;
+        centerY += system.y;
+    }
+    centerX /= systems.size();
+    centerY /= systems.size();
+    
+    for (auto& system : systems) {
+        int connectionCount = connections[system.id].size();
+        double distanceFromCenter = calculateDistance({system.x, system.y}, {centerX, centerY});
+        
+        // Mark as vulnerable if:
+        // - Has only 1-2 connections, OR
+        // - Is far from center (> 60% of galaxy radius) and has < 4 connections
+        bool isVulnerable = (connectionCount <= 2) || 
+                           (distanceFromCenter > config.radius * 0.6 && connectionCount < 4);
+        
+        if (isVulnerable) {
+            vulnerableSystems.push_back(&system);
+        }
+    }
+    
+    std::cout << "  Found " << vulnerableSystems.size() << " vulnerable/outlying systems" << std::endl;
+    
+    // Add redundant connections for vulnerable systems
+    int redundantConnectionsAdded = 0;
+    const int maxRedundantConnections = std::min(static_cast<int>(systems.size() / 4), 40);  // Slightly more generous for gameplay
+    
+    for (StarSystem* vulnSystem : vulnerableSystems) {
+        if (redundantConnectionsAdded >= maxRedundantConnections) break;
+        
+        // Find potential connection targets (systems not already connected)
+        std::vector<std::pair<double, StarSystem*>> potentialConnections;
+        
+        for (auto& system : systems) {
+            StarSystem* targetSystem = &system;
+            
+            // Skip if same system or already connected
+            if (targetSystem == vulnSystem) continue;
+            
+            bool alreadyConnected = false;
+            for (const std::string& connectedId : connections[vulnSystem->id]) {
+                if (connectedId == targetSystem->id) {
+                    alreadyConnected = true;
+                    break;
+                }
+            }
+            if (alreadyConnected) continue;
+            
+            double distance = calculateDistance({vulnSystem->x, vulnSystem->y}, 
+                                              {targetSystem->x, targetSystem->y});
+            
+            // Adjust score based on target system's connectivity (prefer well-connected systems)
+            int targetConnections = connections[targetSystem->id].size();
+            double connectionScore = distance / (1.0 + targetConnections * 0.2);
+            
+            potentialConnections.push_back({connectionScore, targetSystem});
+        }
+        
+        // Sort by connection score (distance adjusted for target connectivity)
+        std::sort(potentialConnections.begin(), potentialConnections.end());
+        
+        // Add 1-2 redundant connections for this vulnerable system  
+        int connectionsToAdd = (connections[vulnSystem->id].size() == 1) ? 2 : 1;
+        
+        for (int i = 0; i < connectionsToAdd && 
+                        i < static_cast<int>(potentialConnections.size()) &&
+                        redundantConnectionsAdded < maxRedundantConnections; ++i) {
+            
+            StarSystem* targetSystem = potentialConnections[i].second;
+            double distance = calculateDistance({vulnSystem->x, vulnSystem->y},
+                                              {targetSystem->x, targetSystem->y});
+            
+            // Only add if distance is reasonable (more generous for redundant connections)
+            // With better spacing, we can use a more reasonable 15 LY limit
+            if (distance < 15.0) {
+                createWarpLane(*vulnSystem, *targetSystem, distance, warpLanes, connections);
+                redundantConnectionsAdded++;
+                
+                std::cout << "  Added redundant connection: " << vulnSystem->name 
+                         << " ↔ " << targetSystem->name 
+                         << " (distance: " << distance << " LY)" << std::endl;
+            }
+        }
+    }
+    
+    if (redundantConnectionsAdded > 0) {
+        std::cout << "  Added " << redundantConnectionsAdded 
+                 << " redundant connections for network resilience" << std::endl;
+    } else {
+        std::cout << "  No suitable redundant connections found within distance limits" << std::endl;
+    }
+}
+
+double GalaxyGenerator::calculateTieredDistance(const StarSystem* system1, const StarSystem* system2, double baseDistance) {
+    // Determine connectivity tier based on system types
+    // origin system gets +150% range (2.5x) - galactic capital
+    // core systems get +100% range (2.0x) - extremely well connected core
+    // rim systems get -60% range (0.4x) - very isolated outer rim
+    // Mixed connections use the more generous (higher) threshold
+    
+    auto getDistanceMultiplier = [](const std::string& systemType) -> double {
+        if (systemType == "origin") {
+            return 2.5;   // +150% for origin system (galactic capital)
+        } else if (systemType == "core") {
+            return 2.0;   // +100% for core systems (extremely well connected)
+        } else {
+            return 0.4;   // -60% for rim systems (very isolated)
+        }
+    };
+    
+    double multiplier1 = getDistanceMultiplier(system1->type);
+    double multiplier2 = getDistanceMultiplier(system2->type);
+    
+    // Use the more generous (higher) multiplier for mixed connections
+    double finalMultiplier = std::max(multiplier1, multiplier2);
+    
+    return baseDistance * finalMultiplier;
 }
 
 } // namespace space4x

@@ -89,6 +89,8 @@ void SimpleHttpServer::handleRequest(int socket) {
     
     if (request.find("POST /generate-galaxy") != std::string::npos) {
         response = handleGalaxyGeneration(request);
+    } else if (request.find("GET /system/") != std::string::npos) {
+        response = handleSystemDetails(request);
     } else if (request.find("GET /health") != std::string::npos) {
         response = handleHealthCheck();
     } else {
@@ -165,22 +167,67 @@ GalaxyConfig SimpleHttpServer::parseSimpleGalaxyConfig(const std::string& json) 
     // Simple JSON parsing
     config.seed = extractIntValue(json, "seed", 42);
     config.radius = extractDoubleValue(json, "radius", 500.0);
-    config.starSystemCount = extractIntValue(json, "starSystemCount", 350);
-    config.anomalyCount = extractIntValue(json, "anomalyCount", 50);
+    
+    // Scale system and anomaly counts with galaxy area (radius²) to maintain consistent density
+    // Base density: ~400 systems in 500 LY radius = ~0.00032 systems per LY²
+    double baseRadius = 500.0;
+    double baseSystems = 400.0;
+    double baseAnomalies = 25.0;
+    
+    double areaScalingFactor = (config.radius * config.radius) / (baseRadius * baseRadius);
+    
+    // Allow override from JSON, but default to scaled values
+    int requestedSystems = extractIntValue(json, "starSystemCount", -1);
+    int requestedAnomalies = extractIntValue(json, "anomalyCount", -1);
+    
+    if (requestedSystems > 0) {
+        config.starSystemCount = requestedSystems;  // Use explicit request
+    } else {
+        config.starSystemCount = static_cast<int>(baseSystems * areaScalingFactor);  // Scale with area
+    }
+    
+    if (requestedAnomalies > 0) {
+        config.anomalyCount = requestedAnomalies;  // Use explicit request
+    } else {
+        config.anomalyCount = static_cast<int>(baseAnomalies * areaScalingFactor);  // Scale with area
+    }
+    
+    std::cout << "🌌 Galaxy scaling: radius=" << config.radius 
+             << " LY, systems=" << config.starSystemCount 
+             << ", anomalies=" << config.anomalyCount 
+             << " (area factor: " << areaScalingFactor << ")" << std::endl;
     config.minDistance = extractDoubleValue(json, "minDistance", 2.0);
     
-    // Set default fixed systems
+    // Set default fixed systems with both real and fictional stars
     config.fixedSystems = {
-        {"sol", "Sol System", 0.0, 0.0, "origin"},
-        {"alpha-centauri", "Alpha Centauri", 4.37, 0.0, "major"},
-        {"tau-ceti", "Tau Ceti", 8.5, 7.2, "major"}
+        // Real star systems with accurate positions
+        {"sol", "Sol System", 0.0, 0.0, "origin", true, 0.0, 0.0},
+        {"alpha-centauri", "Alpha Centauri", 4.37, 0.0, "core", true, 0.0, 0.0},
+        {"tau-ceti", "Tau Ceti", -7.8, 9.1, "core", true, 0.0, 0.0},  // 11.9 LY from Sol
+        {"barnards-star", "Barnard's Star", 2.1, -5.6, "core", true, 0.0, 0.0},  // 5.96 LY from Sol
+        {"bellatrix", "Bellatrix", 180.0, 165.0, "core", true, 0.0, 0.0},  // ~245 LY from Sol (core: ≤300 LY)
+        
+        // Fictional star systems with distance constraints
+        {"lumiere", "Lumière", 0.0, 0.0, "core", false, 250.0, 20.0},  // 250 ± 20 LY (core: ≤300 LY)
+        {"aspida", "Aspida", 0.0, 0.0, "rim", false, 350.0, 20.0}     // 350 ± 20 LY
     };
     
-    // Set default connectivity - Voronoi-based with better connectivity
-    config.connectivity = {2, 5, 12.0, 0.3, true};  // Enable Voronoi connectivity
+    // Parse connectivity settings from nested JSON object or use defaults
+    std::string connectivitySection = extractJsonSection(json, "connectivity");
+    if (!connectivitySection.empty()) {
+        config.connectivity.minConnections = extractIntValue(connectivitySection, "minConnections", 2);
+        config.connectivity.maxConnections = extractIntValue(connectivitySection, "maxConnections", 5);
+        config.connectivity.maxDistance = extractDoubleValue(connectivitySection, "maxDistance", 12.0);
+        config.connectivity.distanceDecayFactor = extractDoubleValue(connectivitySection, "distanceDecayFactor", 0.3);
+        config.connectivity.useVoronoiConnectivity = extractBoolValue(connectivitySection, "useVoronoiConnectivity", true);
+        
+    } else {
+        // Use defaults if connectivity section not found
+        config.connectivity = {2, 5, 12.0, 0.3, true};
+    }
     
     // Set default visualization
-    config.visualization = {1200, 800, 3.0};
+    config.visualization = {1200, 800, 12.0};
     
     return config;
 }
@@ -217,6 +264,48 @@ double SimpleHttpServer::extractDoubleValue(const std::string& json, const std::
     }
 }
 
+bool SimpleHttpServer::extractBoolValue(const std::string& json, const std::string& key, bool defaultValue) {
+    std::string search = "\"" + key + "\":";
+    size_t pos = json.find(search);
+    if (pos == std::string::npos) return defaultValue;
+    
+    pos += search.length();
+    while (pos < json.length() && std::isspace(json[pos])) pos++;
+    
+    if (pos + 4 <= json.length() && json.substr(pos, 4) == "true") return true;
+    if (pos + 5 <= json.length() && json.substr(pos, 5) == "false") return false;
+    
+    return defaultValue;
+}
+
+std::string SimpleHttpServer::extractJsonSection(const std::string& json, const std::string& sectionName) {
+    std::string search = "\"" + sectionName + "\":";
+    size_t pos = json.find(search);
+    if (pos == std::string::npos) return "";
+    
+    pos += search.length();
+    while (pos < json.length() && std::isspace(json[pos])) pos++;
+    
+    if (pos >= json.length() || json[pos] != '{') return "";
+    
+    // Find matching closing brace
+    int braceCount = 1;
+    size_t start = pos;
+    pos++; // Skip opening brace
+    
+    while (pos < json.length() && braceCount > 0) {
+        if (json[pos] == '{') braceCount++;
+        else if (json[pos] == '}') braceCount--;
+        pos++;
+    }
+    
+    if (braceCount == 0) {
+        return json.substr(start, pos - start);
+    }
+    
+    return "";
+}
+
 std::string SimpleHttpServer::galaxyToSimpleJson(const Galaxy& galaxy) {
     std::ostringstream json;
     json << "{";
@@ -241,6 +330,7 @@ std::string SimpleHttpServer::galaxyToSimpleJson(const Galaxy& galaxy) {
         json << "\"isFixed\":" << (sys.isFixed ? "true" : "false") << ",";
         json << "\"explored\":" << (sys.explored ? "true" : "false") << ",";
         json << "\"population\":" << sys.population << ",";
+        json << "\"gdp\":" << sys.gdp << ",";
         json << "\"connections\":[";
         for (size_t j = 0; j < sys.connections.size(); j++) {
             if (j > 0) json << ",";
@@ -251,7 +341,14 @@ std::string SimpleHttpServer::galaxyToSimpleJson(const Galaxy& galaxy) {
         json << "\"minerals\":" << sys.resources.minerals << ",";
         json << "\"energy\":" << sys.resources.energy << ",";
         json << "\"research\":" << sys.resources.research;
-        json << "}";
+        json << "},";
+        json << "\"systemInfo\":{";
+        json << "\"starType\":\"" << sys.systemInfo.starType << "\",";
+        json << "\"planetCount\":" << sys.systemInfo.planetCount << ",";
+        json << "\"moonCount\":" << sys.systemInfo.moonCount << ",";
+        json << "\"asteroidCount\":" << sys.systemInfo.asteroidCount;
+        json << "},";
+        json << "\"hasDetailedData\":" << (sys.detailedSystem ? "true" : "false");
         json << "}";
     }
     json << "],";
@@ -303,6 +400,161 @@ std::string SimpleHttpServer::galaxyToSimpleJson(const Galaxy& galaxy) {
     
     json << "}";
     return json.str();
+}
+
+std::string SimpleHttpServer::handleSystemDetails(const std::string& request) {
+    // Extract system ID from URL path
+    size_t systemPos = request.find("GET /system/");
+    if (systemPos == std::string::npos) {
+        return createErrorResponse("Invalid system request");
+    }
+    
+    size_t idStart = systemPos + 12; // Length of "GET /system/"
+    size_t idEnd = request.find(" ", idStart);
+    if (idEnd == std::string::npos) {
+        return createErrorResponse("Invalid system ID");
+    }
+    
+    std::string systemId = request.substr(idStart, idEnd - idStart);
+    
+    // Get system definition from config manager
+    SystemConfigManager configManager;
+    const SystemDefinition* systemDef = configManager.getSystemDefinition(systemId);
+    
+    if (!systemDef) {
+        return createErrorResponse("System not found or no detailed data available");
+    }
+    
+    // Serialize detailed system data
+    std::ostringstream json;
+    json << "{";
+    json << "\"systemId\":\"" << systemDef->systemId << "\",";
+    json << "\"systemName\":\"" << systemDef->systemName << "\",";
+    json << "\"starType\":\"" << systemDef->starType << "\",";
+    json << "\"starMass\":" << systemDef->starMass << ",";
+    json << "\"starRadius\":" << systemDef->starRadius << ",";
+    json << "\"starTemperature\":" << systemDef->starTemperature << ",";
+    
+    // Serialize planets
+    json << "\"planets\":[";
+    for (size_t i = 0; i < systemDef->planets.size(); i++) {
+        if (i > 0) json << ",";
+        const auto& planet = systemDef->planets[i];
+        
+        json << "{";
+        json << "\"id\":\"" << planet.id << "\",";
+        json << "\"name\":\"" << planet.name << "\",";
+        json << "\"type\":\"" << planet.type << "\",";
+        json << "\"distanceFromStar\":" << planet.distanceFromParent << ",";
+        json << "\"radius\":" << planet.radius << ",";
+        json << "\"diameter\":" << planet.diameter << ",";
+        json << "\"mass\":" << planet.mass << ",";
+        json << "\"gravity\":" << planet.gravity << ",";
+        json << "\"habitability\":" << planet.habitability << ",";
+        json << "\"atmosphere\":\"" << planet.atmosphere << "\",";
+        json << "\"composition\":\"" << planet.composition << "\",";
+        
+        // Serialize resources
+        json << "\"resources\":[";
+        for (size_t j = 0; j < planet.resources.size(); j++) {
+            if (j > 0) json << ",";
+            const auto& resource = planet.resources[j];
+            json << "{";
+            json << "\"type\":" << static_cast<int>(resource.type) << ",";
+            json << "\"abundance\":" << resource.abundance << ",";
+            json << "\"accessibility\":" << resource.accessibility;
+            json << "}";
+        }
+        json << "],";
+        
+        // Serialize moons
+        json << "\"moons\":[";
+        for (size_t j = 0; j < planet.moons.size(); j++) {
+            if (j > 0) json << ",";
+            const auto& moon = planet.moons[j];
+            
+            json << "{";
+            json << "\"id\":\"" << moon.id << "\",";
+            json << "\"name\":\"" << moon.name << "\",";
+            json << "\"type\":\"" << moon.type << "\",";
+            json << "\"distanceFromPlanet\":" << moon.distanceFromParent << ",";
+            json << "\"radius\":" << moon.radius << ",";
+            json << "\"diameter\":" << moon.diameter << ",";
+            json << "\"mass\":" << moon.mass << ",";
+            json << "\"gravity\":" << moon.gravity << ",";
+            json << "\"habitability\":" << moon.habitability << ",";
+            json << "\"atmosphere\":\"" << moon.atmosphere << "\",";
+            json << "\"composition\":\"" << moon.composition << "\",";
+            
+            // Moon resources
+            json << "\"resources\":[";
+            for (size_t k = 0; k < moon.resources.size(); k++) {
+                if (k > 0) json << ",";
+                const auto& resource = moon.resources[k];
+                json << "{";
+                json << "\"type\":" << static_cast<int>(resource.type) << ",";
+                json << "\"abundance\":" << resource.abundance << ",";
+                json << "\"accessibility\":" << resource.accessibility;
+                json << "}";
+            }
+            json << "]";
+            json << "}";
+        }
+        json << "]";
+        json << "}";
+    }
+    json << "],";
+    
+    // Serialize asteroids
+    json << "\"asteroids\":[";
+    for (size_t i = 0; i < systemDef->asteroids.size(); i++) {
+        if (i > 0) json << ",";
+        const auto& asteroid = systemDef->asteroids[i];
+        
+        json << "{";
+        json << "\"id\":\"" << asteroid.id << "\",";
+        json << "\"name\":\"" << asteroid.name << "\",";
+        json << "\"type\":\"" << asteroid.type << "\",";
+        json << "\"distanceFromStar\":" << asteroid.distanceFromParent << ",";
+        json << "\"radius\":" << asteroid.radius << ",";
+        json << "\"diameter\":" << asteroid.diameter << ",";
+        json << "\"mass\":" << asteroid.mass << ",";
+        json << "\"gravity\":" << asteroid.gravity << ",";
+        json << "\"habitability\":" << asteroid.habitability << ",";
+        json << "\"atmosphere\":\"" << asteroid.atmosphere << "\",";
+        json << "\"composition\":\"" << asteroid.composition << "\",";
+        
+        // Asteroid resources
+        json << "\"resources\":[";
+        for (size_t j = 0; j < asteroid.resources.size(); j++) {
+            if (j > 0) json << ",";
+            const auto& resource = asteroid.resources[j];
+            json << "{";
+            json << "\"type\":" << static_cast<int>(resource.type) << ",";
+            json << "\"abundance\":" << resource.abundance << ",";
+            json << "\"accessibility\":" << resource.accessibility;
+            json << "}";
+        }
+        json << "]";
+        json << "}";
+    }
+    json << "]";
+    
+    json << "}";
+    
+    return createJsonResponse(json.str());
+}
+
+std::string SimpleHttpServer::createErrorResponse(const std::string& message) {
+    std::ostringstream response;
+    response << "HTTP/1.1 400 Bad Request\r\n";
+    response << "Content-Type: application/json\r\n";
+    response << "Access-Control-Allow-Origin: *\r\n";
+    response << "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n";
+    response << "Access-Control-Allow-Headers: Content-Type\r\n";
+    response << "\r\n";
+    response << "{\"error\":\"" << message << "\"}";
+    return response.str();
 }
 
 } // namespace space4x

@@ -4,6 +4,7 @@
 #include <string>
 #include <unordered_map>
 #include <random>
+#include "celestial_bodies.h"
 
 namespace space4x {
 
@@ -11,16 +12,26 @@ struct StarSystem {
     std::string id;
     std::string name;
     double x, y;  // Position in light years
-    std::string type;  // "origin", "major", "minor", "frontier"
+    std::string type;  // "origin", "core", "rim"
     bool isFixed;
     std::vector<std::string> connections;  // Connected system IDs
     bool explored;
-    int population;
+    long population;
+    double gdp;  // Gross Domestic Product in credits
     struct {
         int minerals;
         int energy;
         int research;
     } resources;
+    struct {
+        std::string starType;  // "G-class", "K-class", etc.
+        int planetCount;
+        int moonCount;
+        int asteroidCount;
+    } systemInfo;
+    
+    // Detailed celestial body data (optional, for predefined systems)
+    const SystemDefinition* detailedSystem;
 };
 
 struct Anomaly {
@@ -49,6 +60,11 @@ struct FixedSystem {
     std::string name;
     double x, y;
     std::string type;
+    
+    // Optional distance constraints for systems without fixed positions
+    bool hasFixedPosition = true;  // false for distance-constrained systems
+    double targetDistance = 0.0;   // desired distance from origin
+    double distanceTolerance = 0.0; // allowed deviation from target distance
 };
 
 struct VoronoiSite {
@@ -110,6 +126,7 @@ class GalaxyGenerator {
 private:
     GalaxyConfig config;
     SeededRandom random;
+    SystemConfigManager systemConfigManager;
     std::vector<VoronoiSite> voronoiSites;
     
     // Voronoi-based generation (new approach from original game)
@@ -135,16 +152,22 @@ private:
     double calculateDistance(const std::pair<double, double>& a, 
                            const std::pair<double, double>& b);
     
-    // Connection methods
-    void createWarpLane(StarSystem& system1, StarSystem& system2, double distance,
-                       std::vector<WarpLane>& warpLanes,
-                       std::unordered_map<std::string, std::vector<std::string>>& connections);
-    void ensureMinimumConnectivity(std::vector<StarSystem>& systems,
-                                 std::vector<WarpLane>& warpLanes,
-                                 std::unordered_map<std::string, std::vector<std::string>>& connections);
-    void ensureNetworkConnectivity(std::vector<StarSystem>& systems,
-                                 std::vector<WarpLane>& warpLanes,
-                                 std::unordered_map<std::string, std::vector<std::string>>& connections);
+            // Connection methods
+            void createWarpLane(StarSystem& system1, StarSystem& system2, double distance,
+                               std::vector<WarpLane>& warpLanes,
+                               std::unordered_map<std::string, std::vector<std::string>>& connections);
+            void ensureMinimumConnectivity(std::vector<StarSystem>& systems,
+                                         std::vector<WarpLane>& warpLanes,
+                                         std::unordered_map<std::string, std::vector<std::string>>& connections);
+            void ensureNetworkConnectivity(std::vector<StarSystem>& systems,
+                                         std::vector<WarpLane>& warpLanes,
+                                         std::unordered_map<std::string, std::vector<std::string>>& connections);
+            void addRedundantConnections(std::vector<StarSystem>& systems,
+                                       std::vector<WarpLane>& warpLanes,
+                                       std::unordered_map<std::string, std::vector<std::string>>& connections);
+            
+            // Tiered connectivity helper
+            double calculateTieredDistance(const StarSystem* system1, const StarSystem* system2, double baseDistance);
     
     // Name and type generation
     std::string generateSystemName(int index);

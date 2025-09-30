@@ -4,7 +4,7 @@ LDFLAGS =
 
 SRC_DIR = src
 BUILD_DIR = build
-SOURCES = $(SRC_DIR)/main.cpp $(SRC_DIR)/galaxy.cpp $(SRC_DIR)/http_server.cpp
+SOURCES = $(SRC_DIR)/main.cpp $(SRC_DIR)/galaxy.cpp $(SRC_DIR)/http_server.cpp $(SRC_DIR)/celestial_bodies.cpp
 OBJECTS = $(SOURCES:$(SRC_DIR)/%.cpp=$(BUILD_DIR)/%.o)
 TARGET = $(BUILD_DIR)/space4x-engine
 

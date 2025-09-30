@@ -35,17 +35,20 @@ React Frontend (port 3000)     Node.js Backend (port 3001)     C++ Game Engine (
 ### Installation
 
 1. **Clone the repository**
+
    ```bash
    git clone <repository-url>
    cd spacegame
    ```
 
 2. **Install dependencies**
+
    ```bash
    pnpm install
    ```
 
 3. **Set up the database**
+
    ```bash
    cd scripts && ./setup-database.sh
    ```
@@ -58,11 +61,13 @@ React Frontend (port 3000)     Node.js Backend (port 3001)     C++ Game Engine (
 ### Running the Application
 
 **Option 1: Run all services together**
+
 ```bash
 pnpm run dev
 ```
 
 **Option 2: Run services individually**
+
 ```bash
 # Terminal 1: C++ Game Engine
 cd game-engine && ./build/space4x-engine --mode service
@@ -79,7 +84,7 @@ cd frontend && pnpm start
 - **Frontend**: http://localhost:3000
 - **Backend API**: http://localhost:3001
 - **C++ Engine**: http://localhost:3002
-- **Health Checks**: 
+- **Health Checks**:
   - Backend: http://localhost:3001/health
   - Engine: http://localhost:3002/health
   - Galaxy Service: http://localhost:3001/api/galaxy/health
@@ -189,23 +194,27 @@ cd scripts && ./setup-database.sh
 ## 🛠️ Technology Stack
 
 ### Frontend
+
 - **React** 18 with TypeScript
 - **D3.js** for data visualization
 - **Create React App** for development setup
 
 ### Backend
+
 - **Node.js** with Express
 - **TypeScript** for type safety
 - **PostgreSQL** with pg driver
 - **Axios** for HTTP client
 
 ### Game Engine
+
 - **C++17** with STL
 - **Custom HTTP server** (lightweight)
 - **JSON serialization** (manual implementation)
 - **Cross-platform** socket programming
 
 ### Development Tools
+
 - **pnpm** for package management
 - **pnpm workspaces** for monorepo structure
 - **Concurrently** for running multiple services

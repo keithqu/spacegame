@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "A modern space strategy game with hybrid JS/C++ architecture",
   "private": true,
+  "type": "module",
   "scripts": {
     "install:all": "pnpm install",
     "dev": "concurrently --names \"BACKEND,FRONTEND,ENGINE\" --prefix-colors \"blue,green,red\" \"pnpm run dev:backend\" \"pnpm run dev:frontend\" \"pnpm run dev:engine\"",
@@ -15,10 +16,24 @@
     "build:engine": "cd game-engine && make release",
     "start": "pnpm --filter backend start",
     "start:all": "concurrently \"pnpm --filter backend start\" \"pnpm run start:engine\"",
-    "start:engine": "cd game-engine && make release && ./build/space4x-engine --mode service"
+    "start:engine": "cd game-engine && make release && ./build/space4x-engine --mode service",
+    "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
+    "lint:fix": "eslint . --ext .js,.jsx,.ts,.tsx --fix",
+    "format": "prettier --write \"**/*.{js,jsx,ts,tsx,json,css,md}\"",
+    "format:check": "prettier --check \"**/*.{js,jsx,ts,tsx,json,css,md}\"",
+    "type-check": "pnpm --filter frontend type-check && pnpm --filter backend type-check"
   },
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "@typescript-eslint/eslint-plugin": "^8.45.0",
+    "@typescript-eslint/parser": "^8.45.0",
+    "concurrently": "^8.2.2",
+    "eslint": "^9.36.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-import": "^2.32.0",
+    "eslint-plugin-jsx-a11y": "^6.10.2",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "prettier": "^3.6.2"
   },
   "engines": {
     "node": ">=18.0.0",

@@ -1,7 +1,7 @@
-import { Pool } from 'pg';
-import dotenv from 'dotenv';
+import dotenv from 'dotenv'
+import { Pool } from 'pg'
 
-dotenv.config();
+dotenv.config()
 
 const pool = new Pool({
   host: process.env.DB_HOST || 'localhost',
@@ -12,16 +12,16 @@ const pool = new Pool({
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000,
-});
+})
 
 // Test the connection
 pool.on('connect', () => {
-  console.log('✅ Connected to PostgreSQL database');
-});
+  console.log('✅ Connected to PostgreSQL database')
+})
 
-pool.on('error', (err) => {
-  console.error('❌ Unexpected error on idle client', err);
-  process.exit(-1);
-});
+pool.on('error', err => {
+  console.error('❌ Unexpected error on idle client', err)
+  process.exit(-1)
+})
 
-export default pool;
+export default pool
