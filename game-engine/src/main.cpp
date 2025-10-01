@@ -5,9 +5,10 @@
 #include <csignal>
 #include "galaxy.h"
 #include "http_server.h"
+#include "backend_server.h"
 
 // Global server instance for signal handling
-space4x::SimpleHttpServer* global_server = nullptr;
+space4x::BackendServer* global_server = nullptr;
 
 void signalHandler(int signum) {
     std::cout << "\n🛑 Received signal " << signum << ", shutting down..." << std::endl;
@@ -18,22 +19,31 @@ void signalHandler(int signum) {
 }
 
 void runAsService() {
-    std::cout << "🎮 Space 4X Game Engine starting in service mode..." << std::endl;
+    std::cout << "🎮 Space 4X Backend Server starting..." << std::endl;
     
     // Set up signal handlers
     signal(SIGINT, signalHandler);
     signal(SIGTERM, signalHandler);
     
-    space4x::SimpleHttpServer server(3002);
+    space4x::BackendServer server(3001);
     global_server = &server;
     
+    // Configure database connection
+    server.setDatabaseConfig(
+        "localhost",    // host
+        "space4x_game", // database name
+        "space4x_user", // user
+        "",             // password (empty for now)
+        5432            // port
+    );
+    
     if (!server.start()) {
-        std::cerr << "❌ Failed to start HTTP server" << std::endl;
+        std::cerr << "❌ Failed to start backend server" << std::endl;
         return;
     }
     
-    std::cout << "🌟 Game Engine HTTP server running on port 3002" << std::endl;
-    std::cout << "🔄 Ready to process galaxy generation requests..." << std::endl;
+    std::cout << "🌟 Backend server running on port 3001" << std::endl;
+    std::cout << "🔄 Ready to process requests..." << std::endl;
     
     // Run the server
     server.run();

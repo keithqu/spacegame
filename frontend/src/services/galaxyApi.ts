@@ -143,7 +143,9 @@ export class GalaxyApiService {
 
   static async getSystemDetails(systemId: string): Promise<DetailedSystemData | null> {
     try {
-      const response = await fetch(`http://localhost:3002/system/${systemId}`)
+      console.log('API: Fetching system details for:', systemId)
+      const response = await fetch(`${API_BASE_URL}/api/system/${systemId}`)
+      console.log('API: Response status:', response.status, response.ok)
 
       if (!response.ok) {
         console.warn(`No detailed data available for system ${systemId}`)
@@ -151,6 +153,7 @@ export class GalaxyApiService {
       }
 
       const data = await response.json()
+      console.log('API: Received data:', data)
       return data as DetailedSystemData
     } catch (error) {
       console.error('Failed to fetch system details:', error)

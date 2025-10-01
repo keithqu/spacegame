@@ -63,6 +63,8 @@ export const SystemOrbitMap: React.FC<SystemOrbitMapProps> = ({
           const detailedData = await GalaxyApiService.getSystemDetails(system.id)
           // eslint-disable-next-line no-console
           console.log('Received detailed data:', detailedData)
+          // eslint-disable-next-line no-console
+          console.log('Planets in detailed data:', detailedData?.planets?.length || 0)
           setDetailedSystemData(detailedData)
         } catch (error) {
           // eslint-disable-next-line no-console
@@ -81,10 +83,22 @@ export const SystemOrbitMap: React.FC<SystemOrbitMapProps> = ({
 
   // Generate planets based on system info or detailed data
   useEffect(() => {
-    if (!system.systemInfo) return
+    console.log('Planet generation effect triggered:', {
+      hasSystemInfo: !!system.systemInfo,
+      hasDetailedData: !!detailedSystemData,
+      systemInfo: system.systemInfo,
+      detailedDataPlanets: detailedSystemData?.planets?.length || 0,
+    })
 
     // Use detailed system data if available
     if (detailedSystemData) {
+      // eslint-disable-next-line no-console
+      console.log('Processing detailed system data:', {
+        systemId: system.id,
+        hasPlanets: detailedSystemData.planets?.length > 0,
+        planetCount: detailedSystemData.planets?.length || 0,
+        firstPlanet: detailedSystemData.planets?.[0],
+      })
       // Find the largest planet diameter for scaling reference
       const maxPlanetDiameter = Math.max(...detailedSystemData.planets.map(p => p.diameter))
       const minPlanetDiameter = Math.min(...detailedSystemData.planets.map(p => p.diameter))
@@ -148,14 +162,19 @@ export const SystemOrbitMap: React.FC<SystemOrbitMapProps> = ({
         }))
       )
 
+      // eslint-disable-next-line no-console
+      console.log('Setting planets:', allPlanets.length, 'planets')
       setPlanets(allPlanets)
       return
     }
 
+    // Fallback to system info if no detailed data
+    if (!system.systemInfo) return
+
     // Safety check for corrupted data
-    const planetCount = system.systemInfo.planetCount || 0
-    const moonCount = system.systemInfo.moonCount || 0
-    const asteroidCount = system.systemInfo.asteroidCount || 0
+    const planetCount = system.systemInfo?.planetCount || 0
+    const moonCount = system.systemInfo?.moonCount || 0
+    const asteroidCount = system.systemInfo?.asteroidCount || 0
 
     // Prevent frontend stalling with corrupted data
     if (planetCount > 50 || moonCount > 1000 || asteroidCount > 100000) {
@@ -332,6 +351,7 @@ export const SystemOrbitMap: React.FC<SystemOrbitMapProps> = ({
       .attr('stroke-width', 2)
 
     // Add star type label
+    const starType = detailedSystemData?.starType || system.systemInfo?.starType || 'Unknown Star'
     starGroup
       .append('text')
       .attr('x', centerX)
@@ -340,9 +360,11 @@ export const SystemOrbitMap: React.FC<SystemOrbitMapProps> = ({
       .attr('fill', '#FFD700')
       .attr('font-size', '14px')
       .attr('font-weight', 'bold')
-      .text(system.systemInfo?.starType || 'Unknown Star')
+      .text(starType)
 
     // Draw orbits and planets
+    console.log('Rendering planets:', planets.length, 'planets')
+    console.log('Planets data:', planets)
     planets.forEach((planet, index) => {
       const orbitRadius = planet.distance * auScale
 
@@ -472,7 +494,7 @@ export const SystemOrbitMap: React.FC<SystemOrbitMapProps> = ({
         .attr('font-size', '12px')
         .text(stat)
     })
-  }, [planets, dimensions, selectedPlanetId, system])
+  }, [planets, dimensions, selectedPlanetId, system, detailedSystemData?.starType])
 
   return (
     <div className="orbital-map" style={{ width: '100%', height: '100%' }}>

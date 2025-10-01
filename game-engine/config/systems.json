@@ -1,0 +1,402 @@
+{
+  "systems": [
+    {
+      "systemId": "sol",
+      "systemName": "Sol System",
+      "starType": "G-class",
+      "starMass": 1.0,
+      "starRadius": 1.0,
+      "starTemperature": 5778,
+      "planets": [
+        {
+          "id": "mercury",
+          "name": "Mercury",
+          "type": "planet",
+          "distanceFromStar": 0.39,
+          "radius": 2439.7,
+          "diameter": 4879.4,
+          "mass": 0.055,
+          "gravity": 38,
+          "habitability": 0,
+          "atmosphere": "Extremely thin (oxygen, sodium, hydrogen, helium, potassium)",
+          "composition": "Iron core, silicate mantle and crust",
+          "resources": [
+            {"type": 0, "abundance": 85, "accessibility": 70},
+            {"type": 1, "abundance": 60, "accessibility": 45},
+            {"type": 2, "abundance": 25, "accessibility": 30}
+          ],
+          "moons": []
+        },
+        {
+          "id": "venus",
+          "name": "Venus",
+          "type": "planet",
+          "distanceFromStar": 0.72,
+          "radius": 6051.8,
+          "diameter": 12103.6,
+          "mass": 0.815,
+          "gravity": 91,
+          "habitability": 0,
+          "atmosphere": "Dense carbon dioxide with sulfuric acid clouds",
+          "composition": "Iron core, silicate mantle and crust",
+          "resources": [
+            {"type": 0, "abundance": 75, "accessibility": 25},
+            {"type": 1, "abundance": 40, "accessibility": 20},
+            {"type": 2, "abundance": 35, "accessibility": 15}
+          ],
+          "moons": []
+        },
+        {
+          "id": "earth",
+          "name": "Earth",
+          "type": "planet",
+          "distanceFromStar": 1.0,
+          "radius": 6371.0,
+          "diameter": 12742.0,
+          "mass": 1.0,
+          "gravity": 100,
+          "habitability": 100,
+          "atmosphere": "Nitrogen-oxygen with trace gases",
+          "composition": "Iron core, silicate mantle and crust, 71% water surface",
+          "resources": [
+            {"type": 0, "abundance": 60, "accessibility": 85},
+            {"type": 1, "abundance": 45, "accessibility": 80},
+            {"type": 3, "abundance": 95, "accessibility": 95},
+            {"type": 5, "abundance": 30, "accessibility": 60}
+          ],
+          "moons": [
+            {
+              "id": "luna",
+              "name": "Luna",
+              "type": "moon",
+              "distanceFromPlanet": 384400,
+              "radius": 1737.4,
+              "diameter": 3474.8,
+              "mass": 0.012,
+              "gravity": 17,
+              "habitability": 0,
+              "atmosphere": "Extremely thin (argon, neon, hydrogen, helium)",
+              "composition": "Iron core, silicate mantle and crust",
+              "resources": [
+                {"type": 0, "abundance": 70, "accessibility": 75},
+                {"type": 1, "abundance": 35, "accessibility": 60},
+                {"type": 4, "abundance": 80, "accessibility": 70},
+                {"type": 3, "abundance": 40, "accessibility": 50}
+              ]
+            }
+          ]
+        },
+        {
+          "id": "mars",
+          "name": "Mars",
+          "type": "planet",
+          "distanceFromStar": 1.52,
+          "radius": 3389.5,
+          "diameter": 6779.0,
+          "mass": 0.107,
+          "gravity": 45,
+          "habitability": 75,
+          "atmosphere": "Thickened nitrogen-oxygen with CO2 (terraformed)",
+          "composition": "Iron core, silicate mantle and crust",
+          "resources": [
+            {"type": 0, "abundance": 80, "accessibility": 80},
+            {"type": 1, "abundance": 55, "accessibility": 70},
+            {"type": 3, "abundance": 85, "accessibility": 85},
+            {"type": 5, "abundance": 25, "accessibility": 65}
+          ],
+          "moons": [
+            {
+              "id": "phobos",
+              "name": "Phobos",
+              "type": "moon",
+              "distanceFromPlanet": 9376,
+              "radius": 11.3,
+              "diameter": 22.6,
+              "mass": 0.000000018,
+              "gravity": 0.6,
+              "habitability": 0,
+              "atmosphere": "None",
+              "composition": "Carbonaceous chondrite",
+              "resources": [
+                {"type": 0, "abundance": 65, "accessibility": 85},
+                {"type": 1, "abundance": 30, "accessibility": 75}
+              ]
+            },
+            {
+              "id": "deimos",
+              "name": "Deimos",
+              "type": "moon",
+              "distanceFromPlanet": 23463,
+              "radius": 6.2,
+              "diameter": 12.4,
+              "mass": 0.000000002,
+              "gravity": 0.3,
+              "habitability": 0,
+              "atmosphere": "None",
+              "composition": "Carbonaceous chondrite",
+              "resources": [
+                {"type": 0, "abundance": 60, "accessibility": 80},
+                {"type": 1, "abundance": 25, "accessibility": 70}
+              ]
+            }
+          ]
+        },
+        {
+          "id": "jupiter",
+          "name": "Jupiter",
+          "type": "planet",
+          "distanceFromStar": 5.2,
+          "radius": 69911,
+          "diameter": 139822,
+          "mass": 317.8,
+          "gravity": 236,
+          "habitability": 0,
+          "atmosphere": "Hydrogen and helium with trace compounds",
+          "composition": "Hydrogen and helium gas giant",
+          "resources": [
+            {"type": 4, "abundance": 95, "accessibility": 40},
+            {"type": 5, "abundance": 90, "accessibility": 45},
+            {"type": 2, "abundance": 15, "accessibility": 10}
+          ],
+          "moons": [
+            {
+              "id": "io",
+              "name": "Io",
+              "type": "moon",
+              "distanceFromPlanet": 421700,
+              "radius": 1821.6,
+              "diameter": 3643.2,
+              "mass": 0.015,
+              "gravity": 18,
+              "habitability": 0,
+              "atmosphere": "Extremely thin sulfur dioxide",
+              "composition": "Silicate rock with iron core",
+              "resources": [
+                {"type": 0, "abundance": 90, "accessibility": 60},
+                {"type": 1, "abundance": 70, "accessibility": 50},
+                {"type": 2, "abundance": 45, "accessibility": 35}
+              ]
+            },
+            {
+              "id": "europa",
+              "name": "Europa",
+              "type": "moon",
+              "distanceFromPlanet": 671034,
+              "radius": 1560.8,
+              "diameter": 3121.6,
+              "mass": 0.008,
+              "gravity": 13,
+              "habitability": 25,
+              "atmosphere": "Extremely thin oxygen",
+              "composition": "Water ice over silicate interior",
+              "resources": [
+                {"type": 3, "abundance": 95, "accessibility": 80},
+                {"type": 5, "abundance": 60, "accessibility": 70},
+                {"type": 0, "abundance": 50, "accessibility": 40},
+                {"type": 7, "abundance": 20, "accessibility": 15}
+              ]
+            },
+            {
+              "id": "ganymede",
+              "name": "Ganymede",
+              "type": "moon",
+              "distanceFromPlanet": 1070412,
+              "radius": 2634.1,
+              "diameter": 5268.2,
+              "mass": 0.025,
+              "gravity": 15,
+              "habitability": 15,
+              "atmosphere": "Extremely thin oxygen",
+              "composition": "Water ice and silicate rock",
+              "resources": [
+                {"type": 3, "abundance": 90, "accessibility": 85},
+                {"type": 0, "abundance": 65, "accessibility": 70},
+                {"type": 1, "abundance": 40, "accessibility": 60},
+                {"type": 5, "abundance": 45, "accessibility": 75}
+              ]
+            },
+            {
+              "id": "callisto",
+              "name": "Callisto",
+              "type": "moon",
+              "distanceFromPlanet": 1882709,
+              "radius": 2410.3,
+              "diameter": 4820.6,
+              "mass": 0.018,
+              "gravity": 13,
+              "habitability": 10,
+              "atmosphere": "Extremely thin carbon dioxide",
+              "composition": "Water ice and silicate rock",
+              "resources": [
+                {"type": 3, "abundance": 85, "accessibility": 80},
+                {"type": 0, "abundance": 60, "accessibility": 65},
+                {"type": 1, "abundance": 35, "accessibility": 55}
+              ]
+            }
+          ]
+        },
+        {
+          "id": "saturn",
+          "name": "Saturn",
+          "type": "planet",
+          "distanceFromStar": 9.58,
+          "radius": 58232,
+          "diameter": 116464,
+          "mass": 95.2,
+          "gravity": 91,
+          "habitability": 0,
+          "atmosphere": "Hydrogen and helium with trace compounds",
+          "composition": "Hydrogen and helium gas giant",
+          "resources": [
+            {"type": 4, "abundance": 90, "accessibility": 35},
+            {"type": 5, "abundance": 85, "accessibility": 40},
+            {"type": 2, "abundance": 20, "accessibility": 12}
+          ],
+          "moons": [
+            {
+              "id": "titan",
+              "name": "Titan",
+              "type": "moon",
+              "distanceFromPlanet": 1221830,
+              "radius": 2574,
+              "diameter": 5148,
+              "mass": 0.023,
+              "gravity": 14,
+              "habitability": 30,
+              "atmosphere": "Dense nitrogen with methane",
+              "composition": "Water ice and silicate rock",
+              "resources": [
+                {"type": 3, "abundance": 80, "accessibility": 70},
+                {"type": 5, "abundance": 70, "accessibility": 80},
+                {"type": 1, "abundance": 45, "accessibility": 55},
+                {"type": 7, "abundance": 25, "accessibility": 20}
+              ]
+            },
+            {
+              "id": "enceladus",
+              "name": "Enceladus",
+              "type": "moon",
+              "distanceFromPlanet": 238020,
+              "radius": 252.1,
+              "diameter": 504.2,
+              "mass": 0.0002,
+              "gravity": 1,
+              "habitability": 20,
+              "atmosphere": "Extremely thin water vapor",
+              "composition": "Water ice over silicate core",
+              "resources": [
+                {"type": 3, "abundance": 95, "accessibility": 85},
+                {"type": 5, "abundance": 55, "accessibility": 75},
+                {"type": 7, "abundance": 30, "accessibility": 25}
+              ]
+            }
+          ]
+        },
+        {
+          "id": "uranus",
+          "name": "Uranus",
+          "type": "planet",
+          "distanceFromStar": 19.2,
+          "radius": 25362,
+          "diameter": 50724,
+          "mass": 14.5,
+          "gravity": 89,
+          "habitability": 0,
+          "atmosphere": "Hydrogen, helium, and methane",
+          "composition": "Water, methane, and ammonia ices over rock core",
+          "resources": [
+            {"type": 4, "abundance": 75, "accessibility": 25},
+            {"type": 5, "abundance": 70, "accessibility": 30},
+            {"type": 1, "abundance": 40, "accessibility": 20}
+          ],
+          "moons": []
+        },
+        {
+          "id": "neptune",
+          "name": "Neptune",
+          "type": "planet",
+          "distanceFromStar": 30.1,
+          "radius": 24622,
+          "diameter": 49244,
+          "mass": 17.1,
+          "gravity": 113,
+          "habitability": 0,
+          "atmosphere": "Hydrogen, helium, and methane",
+          "composition": "Water, methane, and ammonia ices over rock core",
+          "resources": [
+            {"type": 4, "abundance": 80, "accessibility": 20},
+            {"type": 5, "abundance": 75, "accessibility": 25},
+            {"type": 1, "abundance": 45, "accessibility": 15},
+            {"type": 6, "abundance": 10, "accessibility": 5}
+          ],
+          "moons": []
+        }
+      ],
+      "asteroids": [
+        {
+          "id": "ceres",
+          "name": "Ceres",
+          "type": "asteroid",
+          "distanceFromStar": 2.77,
+          "radius": 473,
+          "diameter": 946,
+          "mass": 0.00016,
+          "gravity": 3,
+          "habitability": 0,
+          "atmosphere": "Extremely thin water vapor",
+          "composition": "Water ice and silicate rock",
+          "resources": [
+            {"type": 3, "abundance": 85, "accessibility": 90},
+            {"type": 0, "abundance": 75, "accessibility": 85},
+            {"type": 1, "abundance": 50, "accessibility": 80}
+          ]
+        },
+        {
+          "id": "vesta",
+          "name": "Vesta",
+          "type": "asteroid",
+          "distanceFromStar": 2.36,
+          "radius": 262.7,
+          "diameter": 525.4,
+          "mass": 0.000044,
+          "gravity": 3,
+          "habitability": 0,
+          "atmosphere": "None",
+          "composition": "Basaltic crust over differentiated interior",
+          "resources": [
+            {"type": 0, "abundance": 90, "accessibility": 90},
+            {"type": 1, "abundance": 70, "accessibility": 85},
+            {"type": 2, "abundance": 35, "accessibility": 70}
+          ]
+        },
+        {
+          "id": "pallas",
+          "name": "Pallas",
+          "type": "asteroid",
+          "distanceFromStar": 2.77,
+          "radius": 272,
+          "diameter": 544,
+          "mass": 0.000036,
+          "gravity": 2,
+          "habitability": 0,
+          "atmosphere": "None",
+          "composition": "Silicate rock",
+          "resources": [
+            {"type": 0, "abundance": 85, "accessibility": 85},
+            {"type": 1, "abundance": 60, "accessibility": 80}
+          ]
+        }
+      ]
+    }
+  ],
+  "resourceTypes": {
+    "0": "MINERALS",
+    "1": "RARE_METALS", 
+    "2": "ENERGY_CRYSTALS",
+    "3": "WATER_ICE",
+    "4": "HELIUM_3",
+    "5": "DEUTERIUM",
+    "6": "ANTIMATTER",
+    "7": "EXOTIC_MATTER"
+  }
+}

@@ -1,12 +1,12 @@
 CXX = g++
-CXXFLAGS = -std=c++17 -Wall -Wextra -Iinclude -I/opt/homebrew/include
-LDFLAGS = 
+CXXFLAGS = -std=c++17 -Wall -Wextra -Iinclude -I/opt/homebrew/include -I/opt/homebrew/Cellar/libpq/17.5/include
+LDFLAGS = -L/opt/homebrew/Cellar/libpq/17.5/lib -lpq
 
 SRC_DIR = src
 BUILD_DIR = build
-SOURCES = $(SRC_DIR)/main.cpp $(SRC_DIR)/galaxy.cpp $(SRC_DIR)/http_server.cpp $(SRC_DIR)/celestial_bodies.cpp
+SOURCES = $(SRC_DIR)/main.cpp $(SRC_DIR)/galaxy.cpp $(SRC_DIR)/http_server.cpp $(SRC_DIR)/celestial_bodies.cpp $(SRC_DIR)/backend_server.cpp
 OBJECTS = $(SOURCES:$(SRC_DIR)/%.cpp=$(BUILD_DIR)/%.o)
-TARGET = $(BUILD_DIR)/space4x-engine
+TARGET = $(BUILD_DIR)/space4x-backend
 
 .PHONY: all debug release dev clean
 
@@ -26,7 +26,7 @@ $(BUILD_DIR):
 
 $(TARGET): $(OBJECTS) | $(BUILD_DIR)
 	$(CXX) $(OBJECTS) -o $@ $(LDFLAGS)
-	@echo "Built game engine: $@"
+	@echo "Built backend server: $@"
 
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) -c $< -o $@

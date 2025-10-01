@@ -117,6 +117,9 @@ std::string SimpleHttpServer::handleGalaxyGeneration(const std::string& request)
         GalaxyGenerator generator(config);
         Galaxy galaxy = generator.generateGalaxy();
         
+        // Store the current galaxy for system lookups
+        currentGalaxy = galaxy;
+        
         // Convert to JSON
         std::string json_response = galaxyToSimpleJson(galaxy);
         
@@ -348,7 +351,7 @@ std::string SimpleHttpServer::galaxyToSimpleJson(const Galaxy& galaxy) {
         json << "\"moonCount\":" << sys.systemInfo.moonCount << ",";
         json << "\"asteroidCount\":" << sys.systemInfo.asteroidCount;
         json << "},";
-        json << "\"hasDetailedData\":" << (sys.detailedSystem ? "true" : "false");
+        json << "\"hasDetailedData\":true";  // All systems now have detailed data available
         json << "}";
     }
     json << "],";
@@ -417,29 +420,60 @@ std::string SimpleHttpServer::handleSystemDetails(const std::string& request) {
     
     std::string systemId = request.substr(idStart, idEnd - idStart);
     
-    // Get system definition from config manager
+    // First, try to get predefined system definition
     SystemConfigManager configManager;
     const SystemDefinition* systemDef = configManager.getSystemDefinition(systemId);
     
-    if (!systemDef) {
-        return createErrorResponse("System not found or no detailed data available");
+    if (systemDef) {
+        // Found predefined system - serialize it
+        return serializeSystemDefinition(*systemDef);
     }
     
-    // Serialize detailed system data
+    // Not a predefined system - look up in current galaxy
+    if (currentGalaxy.systems.empty()) {
+        return createErrorResponse("No galaxy data available. Generate a galaxy first.");
+    }
+    
+    // Find the system in the current galaxy
+    const StarSystem* galaxySystem = nullptr;
+    for (const auto& sys : currentGalaxy.systems) {
+        if (sys.id == systemId) {
+            galaxySystem = &sys;
+            break;
+        }
+    }
+    
+    if (!galaxySystem) {
+        return createErrorResponse("System not found in current galaxy");
+    }
+    
+    // Generate detailed system data for this procedural system
+    SystemDefinition generatedSystem = configManager.generateRandomSystem(systemId, galaxySystem->name);
+    
+    // Override with galaxy system info
+    generatedSystem.systemId = galaxySystem->id;
+    generatedSystem.systemName = galaxySystem->name;
+    generatedSystem.starType = galaxySystem->systemInfo.starType;
+    
+    // Serialize the generated system
+    return serializeSystemDefinition(generatedSystem);
+}
+
+std::string SimpleHttpServer::serializeSystemDefinition(const SystemDefinition& systemDef) {
     std::ostringstream json;
     json << "{";
-    json << "\"systemId\":\"" << systemDef->systemId << "\",";
-    json << "\"systemName\":\"" << systemDef->systemName << "\",";
-    json << "\"starType\":\"" << systemDef->starType << "\",";
-    json << "\"starMass\":" << systemDef->starMass << ",";
-    json << "\"starRadius\":" << systemDef->starRadius << ",";
-    json << "\"starTemperature\":" << systemDef->starTemperature << ",";
+    json << "\"systemId\":\"" << systemDef.systemId << "\",";
+    json << "\"systemName\":\"" << systemDef.systemName << "\",";
+    json << "\"starType\":\"" << systemDef.starType << "\",";
+    json << "\"starMass\":" << systemDef.starMass << ",";
+    json << "\"starRadius\":" << systemDef.starRadius << ",";
+    json << "\"starTemperature\":" << systemDef.starTemperature << ",";
     
     // Serialize planets
     json << "\"planets\":[";
-    for (size_t i = 0; i < systemDef->planets.size(); i++) {
+    for (size_t i = 0; i < systemDef.planets.size(); i++) {
         if (i > 0) json << ",";
-        const auto& planet = systemDef->planets[i];
+        const auto& planet = systemDef.planets[i];
         
         json << "{";
         json << "\"id\":\"" << planet.id << "\",";
@@ -507,9 +541,9 @@ std::string SimpleHttpServer::handleSystemDetails(const std::string& request) {
     
     // Serialize asteroids
     json << "\"asteroids\":[";
-    for (size_t i = 0; i < systemDef->asteroids.size(); i++) {
+    for (size_t i = 0; i < systemDef.asteroids.size(); i++) {
         if (i > 0) json << ",";
-        const auto& asteroid = systemDef->asteroids[i];
+        const auto& asteroid = systemDef.asteroids[i];
         
         json << "{";
         json << "\"id\":\"" << asteroid.id << "\",";

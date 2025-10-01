@@ -25,13 +25,16 @@ export const SystemLedger: React.FC<SystemLedgerProps> = ({
     const fetchDetailedData = async () => {
       if (system.hasDetailedData) {
         try {
+          console.log('SystemLedger: Fetching detailed data for system:', system.id)
           const detailedData = await GalaxyApiService.getSystemDetails(system.id)
+          console.log('SystemLedger: Received detailed data:', detailedData)
           setDetailedSystemData(detailedData)
         } catch (error) {
           console.error('Failed to fetch detailed system data:', error)
           setDetailedSystemData(null)
         }
       } else {
+        console.log('SystemLedger: System has no detailed data:', system.id)
         setDetailedSystemData(null)
       }
     }

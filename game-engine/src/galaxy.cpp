@@ -59,6 +59,9 @@ Galaxy GalaxyGenerator::generateGalaxy() {
     }
     addRedundantConnections(systems, warpLanes, connections);
     
+    // Final safety net: ensure all systems are connected
+    ensureMinimumConnectivity(systems, warpLanes, connections);
+    
     // Update system connections after redundant connections
     for (auto& system : systems) {
         system.connections = connections[system.id];
@@ -448,7 +451,7 @@ void GalaxyGenerator::ensureMinimumConnectivity(std::vector<StarSystem>& systems
                 }
             }
             
-            if (nearest && minDistance <= 15.0) {
+            if (nearest && minDistance <= config.radius * 0.3) {  // 30% of galaxy radius, very generous for edge systems
                 createWarpLane(system, *nearest, minDistance, warpLanes, connections);
                 std::cout << "🔗 Connected isolated system " << system.name 
                          << " to " << nearest->name << " (" << minDistance << " LY)" << std::endl;
@@ -1008,8 +1011,8 @@ void GalaxyGenerator::addRedundantConnections(std::vector<StarSystem>& systems,
                                               {targetSystem->x, targetSystem->y});
             
             // Only add if distance is reasonable (more generous for redundant connections)
-            // With better spacing, we can use a more reasonable 15 LY limit
-            if (distance < 15.0) {
+            // Use 40% of galaxy radius for redundant connections to ensure better connectivity
+            if (distance < config.radius * 0.4) {
                 createWarpLane(*vulnSystem, *targetSystem, distance, warpLanes, connections);
                 redundantConnectionsAdded++;
                 

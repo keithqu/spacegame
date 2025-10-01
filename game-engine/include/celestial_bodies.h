@@ -2,6 +2,8 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <random>
+#include <nlohmann/json.hpp>
 
 namespace space4x {
 
@@ -103,12 +105,12 @@ private:
     std::unordered_map<std::string, SystemDefinition> predefinedSystems;
     
     // Helper methods for random generation
-    Planet generateRandomPlanet(int planetIndex, double distanceFromStar);
-    Moon generateRandomMoon(int moonIndex, const Planet& parentPlanet);
+    Planet generateRandomPlanet(int planetIndex, double distanceFromStar, std::mt19937& gen);
+    Moon generateRandomMoon(int moonIndex, const Planet& parentPlanet, std::mt19937& gen);
     std::vector<ResourceDeposit> generateRandomResources(const std::string& bodyType, int habitability);
     
-    // Sol system definition
-    void defineSolSystem();
+    // JSON loading methods
+    bool loadSystemsFromJson(const std::string& filename);
 };
 
 } // namespace space4x

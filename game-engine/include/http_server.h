@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include "galaxy.h"
 
 namespace space4x {
 
@@ -9,6 +10,7 @@ private:
     int port;
     int server_fd;
     bool running;
+    Galaxy currentGalaxy;  // Store the current galaxy for system lookups
 
 public:
     SimpleHttpServer(int p);
@@ -35,6 +37,7 @@ private:
     std::string extractJsonSection(const std::string& json, const std::string& sectionName);
     std::string galaxyToSimpleJson(const struct Galaxy& galaxy);
     struct GalaxyConfig parseSimpleGalaxyConfig(const std::string& json);
+    std::string serializeSystemDefinition(const struct SystemDefinition& systemDef);
 };
 
 } // namespace space4x
