@@ -168,6 +168,10 @@ private:
             
             // Tiered connectivity helper
             double calculateTieredDistance(const StarSystem* system1, const StarSystem* system2, double baseDistance);
+            
+            // Connectivity verification
+            void verifyConnectivity(const std::vector<StarSystem>& systems,
+                                  const std::unordered_map<std::string, std::vector<std::string>>& connections);
     
     // Name and type generation
     std::string generateSystemName(int index);

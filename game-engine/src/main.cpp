@@ -33,7 +33,7 @@ void runAsService() {
         "localhost",    // host
         "space4x_game", // database name
         "space4x_user", // user
-        "",             // password (empty for now)
+        "space4x_dev_password", // password
         5432            // port
     );
     

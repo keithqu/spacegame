@@ -4,6 +4,8 @@
 #include <algorithm>
 #include <sstream>
 #include <iomanip>
+#include <unordered_set>
+#include <queue>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -62,10 +64,16 @@ Galaxy GalaxyGenerator::generateGalaxy() {
     // Final safety net: ensure all systems are connected
     ensureMinimumConnectivity(systems, warpLanes, connections);
     
+    // Final verification: ensure full network connectivity
+    ensureNetworkConnectivity(systems, warpLanes, connections);
+    
     // Update system connections after redundant connections
     for (auto& system : systems) {
         system.connections = connections[system.id];
     }
+    
+    // Verify all systems are connected
+    verifyConnectivity(systems, connections);
     
     // Generate anomalies (same for both approaches)
     auto anomalies = generateAnomalies(systems);
@@ -451,7 +459,7 @@ void GalaxyGenerator::ensureMinimumConnectivity(std::vector<StarSystem>& systems
                 }
             }
             
-            if (nearest && minDistance <= config.radius * 0.3) {  // 30% of galaxy radius, very generous for edge systems
+            if (nearest) {  // Always connect isolated systems, regardless of distance
                 createWarpLane(system, *nearest, minDistance, warpLanes, connections);
                 std::cout << "🔗 Connected isolated system " << system.name 
                          << " to " << nearest->name << " (" << minDistance << " LY)" << std::endl;
@@ -918,6 +926,9 @@ std::vector<WarpLane> GalaxyGenerator::generateVoronoiWarpLanes(std::vector<Star
     // Ensure minimum connectivity using traditional approach as fallback
     ensureMinimumConnectivity(systems, warpLanes, connections);
     
+    // Ensure full network connectivity (critical for Voronoi method)
+    ensureNetworkConnectivity(systems, warpLanes, connections);
+    
     std::cout << "✅ Generated " << warpLanes.size() << " warp lanes using Voronoi method" << std::endl;
     return warpLanes;
 }
@@ -1055,6 +1066,54 @@ double GalaxyGenerator::calculateTieredDistance(const StarSystem* system1, const
     double finalMultiplier = std::max(multiplier1, multiplier2);
     
     return baseDistance * finalMultiplier;
+}
+
+void GalaxyGenerator::verifyConnectivity(const std::vector<StarSystem>& systems,
+                                       const std::unordered_map<std::string, std::vector<std::string>>& connections) {
+    if (systems.empty()) return;
+    
+    std::cout << "🔍 Verifying network connectivity..." << std::endl;
+    
+    // Use BFS to check if all systems are reachable from the first system
+    std::unordered_set<std::string> visited;
+    std::queue<std::string> toVisit;
+    
+    toVisit.push(systems[0].id);
+    visited.insert(systems[0].id);
+    
+    while (!toVisit.empty()) {
+        std::string current = toVisit.front();
+        toVisit.pop();
+        
+        auto it = connections.find(current);
+        if (it != connections.end()) {
+            for (const auto& neighbor : it->second) {
+                if (visited.find(neighbor) == visited.end()) {
+                    visited.insert(neighbor);
+                    toVisit.push(neighbor);
+                }
+            }
+        }
+    }
+    
+    int connectedSystems = visited.size();
+    int totalSystems = systems.size();
+    
+    if (connectedSystems == totalSystems) {
+        std::cout << "✅ All " << totalSystems << " systems are connected to the network" << std::endl;
+    } else {
+        std::cout << "❌ WARNING: Only " << connectedSystems << " of " << totalSystems 
+                  << " systems are connected to the network!" << std::endl;
+        
+        // List disconnected systems
+        std::cout << "   Disconnected systems: ";
+        for (const auto& system : systems) {
+            if (visited.find(system.id) == visited.end()) {
+                std::cout << system.name << " ";
+            }
+        }
+        std::cout << std::endl;
+    }
 }
 
 } // namespace space4x

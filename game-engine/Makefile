@@ -1,6 +1,6 @@
 CXX = g++
-CXXFLAGS = -std=c++17 -Wall -Wextra -Iinclude -I/opt/homebrew/include -I/opt/homebrew/Cellar/libpq/17.5/include
-LDFLAGS = -L/opt/homebrew/Cellar/libpq/17.5/lib -lpq
+CXXFLAGS = -std=c++17 -Wall -Wextra -Iinclude $(shell pkg-config --cflags libpq)
+LDFLAGS = $(shell pkg-config --libs libpq)
 
 SRC_DIR = src
 BUILD_DIR = build
