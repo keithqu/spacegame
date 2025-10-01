@@ -82,16 +82,20 @@ echo "🔍 Testing database connection..."
 if psql -U $DB_USER -d $DB_NAME -c "SELECT version();" &> /dev/null; then
     echo -e "${GREEN}✅ Database connection successful!${NC}"
     
-    # Run migrations
+    # Run SQL migrations from /database
     echo "🔄 Running database migrations..."
-    cd ../backend && pnpm run migrate
+    SQL_DIR="../database"
+    for FILE in $(ls "$SQL_DIR"/*.sql | sort); do
+        echo "Applying $FILE ..."
+        psql -U $DB_USER -d $DB_NAME -f "$FILE" || { echo -e "${RED}Failed to apply $FILE${NC}"; exit 1; }
+    done
     
     echo -e "${GREEN}🎉 Database setup complete!${NC}"
     echo ""
     echo "Next steps:"
-    echo "1. Start the backend server: cd backend && pnpm run dev"
-    echo "2. The backend will be available at http://localhost:3001"
-    echo "3. Check health: curl http://localhost:3001/health"
+    echo "1. Start the backend engine: cd .. && pnpm run start"
+    echo "2. Start the frontend: cd ../frontend && pnpm start"
+    echo "3. Verify tables: psql -U $DB_USER -d $DB_NAME -c \"\dt\""
 else
     echo -e "${RED}❌ Database connection failed${NC}"
     echo "Please check your PostgreSQL installation and try again"
