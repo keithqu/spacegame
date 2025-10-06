@@ -8,6 +8,7 @@
 #include <cstring>
 #include <algorithm>
 #include <regex>
+#include <cstdlib>
 
 namespace space4x {
 
@@ -23,10 +24,17 @@ BackendServer::~BackendServer() {
 }
 
 bool BackendServer::start() {
-    // Connect to database first
+    // Connect to database first (optional when SPACE4X_SKIP_DB is set)
+    const char* skipDbEnv = std::getenv("SPACE4X_SKIP_DB");
+    bool skipDb = (skipDbEnv != nullptr && std::string(skipDbEnv) == "1");
+
     if (!connectToDatabase()) {
-        std::cerr << "❌ Failed to connect to database" << std::endl;
-        return false;
+        if (skipDb) {
+            std::cerr << "⚠️  Database connection failed; continuing because SPACE4X_SKIP_DB=1" << std::endl;
+        } else {
+            std::cerr << "❌ Failed to connect to database" << std::endl;
+            return false;
+        }
     }
     
     // Create socket
@@ -143,6 +151,8 @@ std::string BackendServer::handleRequest(const std::string& request) {
         return handleHealthCheck();
     } else if (path == "/api/test") {
         return handleApiTest();
+    } else if (path == "/api/user/current" && method == "GET") {
+        return handleGetCurrentUser();
     } else if (path == "/api/galaxy/generate" && method == "POST") {
         return handleGalaxyGenerate(body);
     } else if (path == "/api/galaxy/health") {
@@ -153,6 +163,12 @@ std::string BackendServer::handleRequest(const std::string& request) {
         return handleGameState();
     } else if (path == "/api/game/action" && method == "POST") {
         return handleGameAction(body);
+    } else if (path == "/api/saves" && method == "GET") {
+        return handleGetSaves();
+    } else if (path == "/api/saves" && method == "POST") {
+        return handleSaveGame(body);
+    } else if (path.find("/api/saves/") == 0 && method == "GET") {
+        return handleLoadGame(request);
     } else {
         return createErrorResponse(404, "Route not found");
     }
@@ -180,6 +196,47 @@ std::string BackendServer::handleApiTest() {
     return createJsonResponse(json.str());
 }
 
+std::string BackendServer::handleGetCurrentUser() {
+    if (!db_connection) {
+        return createErrorResponse(500, "Database connection not available");
+    }
+    
+    // For now, return the default "keith" user
+    // In a real implementation, this would validate session/auth tokens
+    const char* query = "SELECT id, username, email, membership FROM users WHERE username = 'keith' LIMIT 1";
+    PGresult* result = PQexec(db_connection, query);
+    
+    if (PQresultStatus(result) != PGRES_TUPLES_OK) {
+        std::string error = PQresultErrorMessage(result);
+        PQclear(result);
+        return createErrorResponse(500, "Database query failed: " + error);
+    }
+    
+    if (PQntuples(result) == 0) {
+        PQclear(result);
+        return createErrorResponse(404, "User not found");
+    }
+    
+    // Extract user data
+    std::string id = PQgetvalue(result, 0, 0);
+    std::string username = PQgetvalue(result, 0, 1);
+    std::string email = PQgetvalue(result, 0, 2);
+    std::string membership = PQgetvalue(result, 0, 3);
+    
+    PQclear(result);
+    
+    // Build JSON response
+    std::ostringstream json;
+    json << "{";
+    json << "\"id\":\"" << id << "\",";
+    json << "\"username\":\"" << username << "\",";
+    json << "\"email\":\"" << email << "\",";
+    json << "\"membership\":" << (membership.empty() ? "null" : "\"" + membership + "\"");
+    json << "}";
+    
+    return createJsonResponse(json.str());
+}
+
 std::string BackendServer::handleGalaxyGenerate(const std::string& request) {
     try {
         std::cout << "🌌 Received galaxy generation request" << std::endl;
@@ -189,25 +246,59 @@ std::string BackendServer::handleGalaxyGenerate(const std::string& request) {
         int systems = 400;
         int anomalies = 25;
         long seed = 1111111111;
+        int saveSlot = 1;
+        bool useSavedFlag = false;
+        bool radiusProvided = false, systemsProvided = false, anomaliesProvided = false, seedProvided = false;
         
         // Simple JSON parsing for parameters
         std::regex radiusRegex(R"("radius":\s*(\d+))");
         std::regex systemsRegex(R"("systems":\s*(\d+))");
         std::regex anomaliesRegex(R"("anomalies":\s*(\d+))");
         std::regex seedRegex(R"("seed":\s*(\d+))");
+        std::regex slotRegex(R"("save_slot":\s*(\d+))");
+        std::regex useSavedRegex(R"("use_saved":\s*(true|false))");
         
         std::smatch match;
         if (std::regex_search(request, match, radiusRegex)) {
             radius = std::stoi(match[1].str());
+            radiusProvided = true;
         }
         if (std::regex_search(request, match, systemsRegex)) {
             systems = std::stoi(match[1].str());
+            systemsProvided = true;
         }
         if (std::regex_search(request, match, anomaliesRegex)) {
             anomalies = std::stoi(match[1].str());
+            anomaliesProvided = true;
         }
         if (std::regex_search(request, match, seedRegex)) {
             seed = std::stol(match[1].str());
+            seedProvided = true;
+        }
+        if (std::regex_search(request, match, slotRegex)) {
+            saveSlot = std::stoi(match[1].str());
+        }
+        if (std::regex_search(request, match, useSavedRegex)) {
+            useSavedFlag = (match[1].str() == "true");
+        }
+        bool anyParamsProvided = radiusProvided || systemsProvided || anomaliesProvided || seedProvided;
+
+        // Decide behavior: if use_saved is true, try load; otherwise if params provided, generate; else try load then generate
+        if (useSavedFlag) {
+            bool found = false;
+            std::string savedJson = loadSavedStateForUser("keith", saveSlot, found);
+            if (found && !savedJson.empty()) {
+                std::cout << "💾 Loaded existing saved galaxy for user keith (slot " << saveSlot << ")" << std::endl;
+                return createJsonResponse(savedJson);
+            }
+            // If requested use_saved but none found, fall through to generation
+        } else if (!useSavedFlag && !anyParamsProvided) {
+            bool found = false;
+            std::string savedJson = loadSavedStateForUser("keith", saveSlot, found);
+            if (found && !savedJson.empty()) {
+                std::cout << "💾 Loaded existing saved galaxy for user keith (slot " << saveSlot << ")" << std::endl;
+                return createJsonResponse(savedJson);
+            }
         }
         
         // Generate galaxy using existing game engine
@@ -289,7 +380,9 @@ std::string BackendServer::handleGalaxyGenerate(const std::string& request) {
             json << "\"asteroidCount\":" << system.systemInfo.asteroidCount;
             json << "},";
             
-            json << "\"hasDetailedData\":true";
+            // Only mark systems as having detailed data if a predefined definition exists
+            bool hasDetailed = (system.detailedSystem != nullptr);
+            json << "\"hasDetailedData\":" << (hasDetailed ? "true" : "false");
             json << "}";
         }
         
@@ -320,6 +413,15 @@ std::string BackendServer::handleGalaxyGenerate(const std::string& request) {
         json << "}";
         
         std::cout << "✅ Galaxy generated successfully" << std::endl;
+        
+        // Persist generated state
+        std::string error;
+        if (!upsertSavedStateForUser("keith", saveSlot, json.str(), error)) {
+            std::cerr << "⚠️  Failed to persist save: " << error << std::endl;
+        } else {
+            std::cout << "💾 Saved galaxy to DB for user keith (slot " << saveSlot << ")" << std::endl;
+        }
+        
         return createJsonResponse(json.str());
         
     } catch (const std::exception& e) {
@@ -388,12 +490,12 @@ std::string BackendServer::handleSystemDetails(const std::string& request) {
 }
 
 std::string BackendServer::handleGameState() {
-    std::ostringstream json;
-    json << "{";
-    json << "\"message\":\"Game state endpoint - to be implemented\",";
-    json << "\"gameId\":\"placeholder\"";
-    json << "}";
-    return createJsonResponse(json.str());
+    bool found = false;
+    std::string savedJson = loadSavedStateForUser("keith", 1, found);
+    if (found && !savedJson.empty()) {
+        return createJsonResponse(savedJson);
+    }
+    return createErrorResponse(404, "No saved game state for user");
 }
 
 std::string BackendServer::handleGameAction(const std::string& request) {
@@ -403,6 +505,168 @@ std::string BackendServer::handleGameAction(const std::string& request) {
     json << "\"action\":" << request;
     json << "}";
     return createJsonResponse(json.str());
+}
+
+std::string BackendServer::handleGetSaves() {
+    if (!db_connection) {
+        return createErrorResponse(500, "Database connection not available");
+    }
+    
+    // For now, get saves for the default "keith" user
+    // In a real implementation, this would validate session/auth tokens
+    const char* query = "SELECT s.id, s.save_slot, s.save_data, s.created_at, s.updated_at FROM saves s JOIN users u ON s.user_id = u.id WHERE u.username = 'keith' ORDER BY s.save_slot";
+    PGresult* result = PQexec(db_connection, query);
+    
+    if (PQresultStatus(result) != PGRES_TUPLES_OK) {
+        std::string error = PQresultErrorMessage(result);
+        PQclear(result);
+        return createErrorResponse(500, "Database query failed: " + error);
+    }
+    
+    int numRows = PQntuples(result);
+    std::ostringstream json;
+    json << "{\"saves\":[";
+    
+    for (int i = 0; i < numRows; i++) {
+        if (i > 0) json << ",";
+        json << "{";
+        json << "\"id\":\"" << PQgetvalue(result, i, 0) << "\",";
+        json << "\"save_slot\":" << PQgetvalue(result, i, 1) << ",";
+        json << "\"save_data\":" << PQgetvalue(result, i, 2) << ",";
+        json << "\"created_at\":\"" << PQgetvalue(result, i, 3) << "\",";
+        json << "\"updated_at\":\"" << PQgetvalue(result, i, 4) << "\"";
+        json << "}";
+    }
+    
+    json << "]}";
+    PQclear(result);
+    
+    return createJsonResponse(json.str());
+}
+
+std::string BackendServer::handleSaveGame(const std::string& request) {
+    if (!db_connection) {
+        return createErrorResponse(500, "Database connection not available");
+    }
+    
+    // Parse minimal fields from request body
+    int saveSlot = 1;
+    std::regex slotRegex(R"("save_slot":\s*(\d+))");
+    std::smatch match;
+    if (std::regex_search(request, match, slotRegex)) {
+        saveSlot = std::stoi(match[1].str());
+    }
+    
+    // Everything after the body is treated as the saved state JSON
+    std::string saveJson = request;
+    
+    std::string error;
+    if (!upsertSavedStateForUser("keith", saveSlot, saveJson, error)) {
+        return createErrorResponse(500, std::string("Failed to save: ") + error);
+    }
+    
+    std::ostringstream resp;
+    resp << "{";
+    resp << "\"status\":\"saved\",";
+    resp << "\"save_slot\":" << saveSlot;
+    resp << "}";
+    return createJsonResponse(resp.str());
+}
+std::string BackendServer::loadSavedStateForUser(const std::string& username, int slot, bool& found) {
+    found = false;
+    if (!db_connection) {
+        return "";
+    }
+    const char* query = "SELECT s.save_data FROM saves s JOIN users u ON s.user_id = u.id WHERE u.username = $1 AND s.save_slot = $2 LIMIT 1";
+    const char* paramValues[] = { username.c_str(), std::to_string(slot).c_str() };
+    int paramLengths[] = { static_cast<int>(username.length()), static_cast<int>(std::to_string(slot).length()) };
+    int paramFormats[] = { 0, 0 };
+    PGresult* result = PQexecParams(db_connection, query, 2, nullptr, paramValues, paramLengths, paramFormats, 0);
+    if (PQresultStatus(result) != PGRES_TUPLES_OK) {
+        std::string error = PQresultErrorMessage(result);
+        std::cerr << "❌ Load save failed: " << error << std::endl;
+        PQclear(result);
+        return "";
+    }
+    if (PQntuples(result) == 0) {
+        PQclear(result);
+        return "";
+    }
+    found = true;
+    std::string json = PQgetvalue(result, 0, 0);
+    PQclear(result);
+    return json;
+}
+
+bool BackendServer::upsertSavedStateForUser(const std::string& username, int slot, const std::string& saveJson, std::string& errorOut) {
+    if (!db_connection) {
+        errorOut = "No database connection";
+        return false;
+    }
+    
+    // Upsert using CTE to get user id
+    const char* query =
+        "WITH u AS (SELECT id FROM users WHERE username = $1),\n"
+        "ins AS (\n"
+        "  INSERT INTO saves (user_id, save_slot, save_data)\n"
+        "  SELECT u.id, $2::int, $3::jsonb FROM u\n"
+        "  ON CONFLICT (user_id, save_slot) DO UPDATE SET save_data = $3::jsonb, updated_at = NOW()\n"
+        "  RETURNING id\n"
+        ") SELECT id FROM ins";
+    
+    std::string slotStr = std::to_string(slot);
+    const char* paramValues[] = { username.c_str(), slotStr.c_str(), saveJson.c_str() };
+    int paramLengths[] = { static_cast<int>(username.length()), static_cast<int>(slotStr.length()), static_cast<int>(saveJson.length()) };
+    int paramFormats[] = { 0, 0, 0 };
+    PGresult* result = PQexecParams(db_connection, query, 3, nullptr, paramValues, paramLengths, paramFormats, 0);
+    if (PQresultStatus(result) != PGRES_TUPLES_OK) {
+        errorOut = PQresultErrorMessage(result);
+        PQclear(result);
+        return false;
+    }
+    PQclear(result);
+    return true;
+}
+
+std::string BackendServer::handleLoadGame(const std::string& request) {
+    if (!db_connection) {
+        return createErrorResponse(500, "Database connection not available");
+    }
+    
+    // Extract save ID from path
+    std::regex pathRegex(R"(/api/saves/([^/\s]+))");
+    std::smatch match;
+    
+    if (!std::regex_search(request, match, pathRegex)) {
+        return createErrorResponse(400, "Invalid save ID");
+    }
+    
+    std::string saveId = match[1].str();
+    
+    // For now, load save for the default "keith" user
+    // In a real implementation, this would validate session/auth tokens
+    const char* query = "SELECT s.save_data FROM saves s JOIN users u ON s.user_id = u.id WHERE s.id = $1 AND u.username = 'keith'";
+    const char* paramValues[] = { saveId.c_str() };
+    int paramLengths[] = { static_cast<int>(saveId.length()) };
+    int paramFormats[] = { 0 }; // text format
+    
+    PGresult* result = PQexecParams(db_connection, query, 1, nullptr, paramValues, paramLengths, paramFormats, 0);
+    
+    if (PQresultStatus(result) != PGRES_TUPLES_OK) {
+        std::string error = PQresultErrorMessage(result);
+        PQclear(result);
+        return createErrorResponse(500, "Database query failed: " + error);
+    }
+    
+    if (PQntuples(result) == 0) {
+        PQclear(result);
+        return createErrorResponse(404, "Save not found");
+    }
+    
+    std::string saveData = PQgetvalue(result, 0, 0);
+    PQclear(result);
+    
+    return createJsonResponse(saveData);
 }
 
 bool BackendServer::connectToDatabase() {

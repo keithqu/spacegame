@@ -29,12 +29,20 @@ private:
     // HTTP request handling
     std::string handleRequest(const std::string& request);
     std::string handleHealthCheck();
+    std::string handleGetCurrentUser();
     std::string handleGalaxyGenerate(const std::string& request);
     std::string handleGalaxyHealth();
     std::string handleSystemDetails(const std::string& request);
     std::string handleGameState();
     std::string handleGameAction(const std::string& request);
+    std::string handleGetSaves();
+    std::string handleSaveGame(const std::string& request);
+    std::string handleLoadGame(const std::string& request);
     std::string handleApiTest();
+    
+    // Save/load helpers
+    std::string loadSavedStateForUser(const std::string& username, int slot, bool& found);
+    bool upsertSavedStateForUser(const std::string& username, int slot, const std::string& saveJson, std::string& errorOut);
     
     // Database operations
     bool connectToDatabase();

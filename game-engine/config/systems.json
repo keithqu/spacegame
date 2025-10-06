@@ -1,6 +1,89 @@
 {
   "systems": [
     {
+      "systemId": "lumiere",
+      "systemName": "Lumière",
+      "starType": "G-class",
+      "starMass": 1.0001,
+      "starRadius": 1.001,
+      "starTemperature": 5838,
+      "planets": [
+        {
+          "id": "lumiere-1",
+          "name": "Lumière 1",
+          "type": "planet",
+          "distanceFromStar": 1.05,
+          "radius": 6534,
+          "diameter": 13068,
+          "mass": 1.02,
+          "gravity": 102,
+          "habitability": 98
+        },
+        {
+          "id": "lumiere-2",
+          "name": "Lumière 2",
+          "type": "planet",
+          "distanceFromStar": 1.05,
+          "radius": 6534,
+          "diameter": 13068,
+          "mass": 1.02,
+          "gravity": 102,
+          "habitability": 98
+        },
+        {
+          "id": "lumiere",
+          "name": "Lumière",
+          "type": "planet",
+          "distanceFromStar": 1.05,
+          "radius": 6534,
+          "diameter": 13068,
+          "mass": 1.02,
+          "gravity": 102,
+          "habitability": 98,
+          "atmosphere": "Nitrogen-oxygen with trace gases",
+          "composition": "Iron core, silicate mantle and crust, 67% water surface",
+          "resources": [
+            {"type": 0, "abundance": 60, "accessibility": 85},
+            {"type": 1, "abundance": 45, "accessibility": 80},
+            {"type": 3, "abundance": 95, "accessibility": 95},
+            {"type": 5, "abundance": 30, "accessibility": 60}
+          ],
+          "moons": [
+            {
+              "id": "luna",
+              "name": "Luna",
+              "type": "moon",
+              "distanceFromPlanet": 423400,
+              "radius": 1537.4,
+              "diameter": 3074.8,
+              "mass": 0.010,
+              "gravity": 15,
+              "habitability": 0,
+              "atmosphere": "Extremely thin (argon, neon, hydrogen, helium)",
+              "composition": "Iron core, silicate mantle and crust",
+              "resources": [
+                {"type": 0, "abundance": 70, "accessibility": 75},
+                {"type": 1, "abundance": 35, "accessibility": 60},
+                {"type": 4, "abundance": 80, "accessibility": 70},
+                {"type": 3, "abundance": 40, "accessibility": 50}
+              ]
+            }
+          ]
+        }
+      ],
+      "asteroids": [],
+      "resourceTypes": {
+        "0": "MINERALS",
+        "1": "RARE_METALS", 
+        "2": "ENERGY_CRYSTALS",
+        "3": "WATER_ICE",
+        "4": "HELIUM_3",
+        "5": "DEUTERIUM",
+        "6": "ANTIMATTER",
+        "7": "EXOTIC_MATTER"
+      }
+    },
+    {
       "systemId": "sol",
       "systemName": "Sol System",
       "starType": "G-class",

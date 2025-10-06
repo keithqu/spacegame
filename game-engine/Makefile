@@ -1,6 +1,7 @@
 CXX = g++
-CXXFLAGS = -std=c++17 -Wall -Wextra -Iinclude $(shell pkg-config --cflags libpq)
-LDFLAGS = $(shell pkg-config --libs libpq)
+# Add common include paths so headers like nlohmann/json.hpp are found on macOS/Homebrew and Linux
+CXXFLAGS = -std=c++17 -Wall -Wextra -Iinclude -I/opt/homebrew/include/postgresql@18 -I/opt/homebrew/Cellar/nlohmann-json/3.12.0/include -I/usr/local/include
+LDFLAGS = -L/opt/homebrew/lib/postgresql@18 -lpq
 
 SRC_DIR = src
 BUILD_DIR = build

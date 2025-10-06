@@ -3,6 +3,69 @@ import { Galaxy, GalaxyConfig, DEFAULT_GALAXY_CONFIG, DetailedSystemData } from 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001'
 
 export class GalaxyApiService {
+  static async listSaves(): Promise<
+    Array<{ id: string; save_slot: number; created_at: string; updated_at: string }>
+  > {
+    const resp = await fetch(`${API_BASE_URL}/api/saves`)
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    const data = await resp.json()
+    return (data.saves || []).map((s: any) => ({
+      id: s.id,
+      save_slot: s.save_slot,
+      created_at: s.created_at,
+      updated_at: s.updated_at,
+    }))
+  }
+
+  static async loadSave(id: string): Promise<any> {
+    const resp = await fetch(`${API_BASE_URL}/api/saves/${id}`)
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    return await resp.json()
+  }
+  static async getSavedState(): Promise<Galaxy | null> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/game/state`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      })
+
+      if (response.status === 404) {
+        return null
+      }
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+      }
+
+      const galaxyData = await response.json()
+
+      const mergedConfig = {
+        ...DEFAULT_GALAXY_CONFIG,
+        ...galaxyData.config,
+        visualization: {
+          ...DEFAULT_GALAXY_CONFIG.visualization,
+          ...(galaxyData.config?.visualization || {}),
+        },
+        fixedSystems: galaxyData.config?.fixedSystems || DEFAULT_GALAXY_CONFIG.fixedSystems,
+      }
+
+      return {
+        config: mergedConfig,
+        systems: galaxyData.systems || [],
+        anomalies: galaxyData.anomalies || [],
+        warpLanes: galaxyData.warpLanes || [],
+        bounds: galaxyData.bounds || {
+          minX: -mergedConfig.radius,
+          maxX: mergedConfig.radius,
+          minY: -mergedConfig.radius,
+          maxY: mergedConfig.radius,
+          radius: mergedConfig.radius,
+        },
+      }
+    } catch (error) {
+      console.error('Failed to fetch saved state:', error)
+      return null
+    }
+  }
   static async generateGalaxy(config: Partial<GalaxyConfig>): Promise<Galaxy> {
     try {
       console.log('🌌 Requesting galaxy generation from backend...', config)

@@ -1,9 +1,12 @@
+/* eslint @typescript-eslint/no-unused-vars: ["error", { "argsIgnorePattern": "^_" }] */
+/* eslint no-unused-vars: off */
+
 import React, { useState, useMemo } from 'react'
 import { StarSystem, Galaxy } from '../types/galaxy'
 
 interface GalaxyLedgerProps {
   galaxy: Galaxy | null
-  onSystemSelect?: (_system: StarSystem) => void
+  onSystemSelect?: (system: StarSystem) => void
   selectedSystemId?: string | null
 }
 

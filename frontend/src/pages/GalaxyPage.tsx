@@ -3,13 +3,51 @@ import { GalaxyMap } from '../components/GalaxyMap'
 import { GalaxyLedger } from '../components/GalaxyLedger'
 import { SystemPage } from './SystemPage'
 import { StarSystem, Anomaly, GalaxyConfig, DEFAULT_GALAXY_CONFIG, Galaxy } from '../types/galaxy'
+import { useUser } from '../contexts/UserContext'
 
-export const GalaxyPage: React.FC = () => {
+interface GalaxyPageProps {
+  initialGalaxyJson?: any | null
+  startNew?: boolean
+}
+
+export const GalaxyPage: React.FC<GalaxyPageProps> = ({
+  initialGalaxyJson = null,
+  startNew = false,
+}) => {
+  useUser()
   const [config, setConfig] = useState<Partial<GalaxyConfig>>(DEFAULT_GALAXY_CONFIG)
   const [selectedSystem, setSelectedSystem] = useState<StarSystem | null>(null)
   const [selectedAnomaly, setSelectedAnomaly] = useState<Anomaly | null>(null)
-  const [galaxy, setGalaxy] = useState<Galaxy | null>(null)
+  const sanitizeLoadedGalaxy = (g: any): Galaxy | null => {
+    if (!g) return null
+    const predefinedIds = new Set([
+      'sol',
+      'alpha-centauri',
+      'tau-ceti',
+      'barnards-star',
+      'bellatrix',
+      'lumiere',
+      'aspida',
+    ])
+    const systems = (g.systems || []).map((s: any) => ({
+      ...s,
+      hasDetailedData: predefinedIds.has(s.id),
+    }))
+    // Ensure visualization exists under config for renderer defaults
+    const configPatched = {
+      ...(g.config || {}),
+      visualization: g.config?.visualization || {
+        width: 1200,
+        height: 800,
+        scale: 6.0,
+      },
+    }
+    return { ...g, systems, config: configPatched }
+  }
+
+  const [galaxy, setGalaxy] = useState<Galaxy | null>(sanitizeLoadedGalaxy(initialGalaxyJson))
   const [viewingSystem, setViewingSystem] = useState<StarSystem | null>(null)
+  const [forceNew, setForceNew] = useState<boolean>(startNew)
 
   const handleSystemClick = (system: StarSystem) => {
     setSelectedSystem(system)
@@ -37,7 +75,8 @@ export const GalaxyPage: React.FC = () => {
   }
 
   const handleGalaxyLoad = useCallback((loadedGalaxy: Galaxy) => {
-    setGalaxy(loadedGalaxy)
+    const sanitized = sanitizeLoadedGalaxy(loadedGalaxy)
+    if (sanitized) setGalaxy(sanitized)
   }, [])
 
   const handleConfigChange = (newConfig: Partial<GalaxyConfig>) => {
@@ -47,17 +86,13 @@ export const GalaxyPage: React.FC = () => {
   const regenerateGalaxy = () => {
     const newSeed = Math.floor(Math.random() * 1000000)
     handleConfigChange({ seed: newSeed })
+    setForceNew(true)
+    setTimeout(() => setForceNew(false), 0)
   }
 
   // If viewing a system, show the system page
   if (viewingSystem && galaxy) {
-    return (
-      <SystemPage
-        system={viewingSystem}
-        galaxy={galaxy}
-        onBackToGalaxy={handleBackToGalaxy}
-      />
-    )
+    return <SystemPage system={viewingSystem} galaxy={galaxy} onBackToGalaxy={handleBackToGalaxy} />
   }
 
   return (
@@ -117,6 +152,8 @@ export const GalaxyPage: React.FC = () => {
             onGalaxyLoad={handleGalaxyLoad}
             onViewSystem={handleViewSystem}
             selectedSystemId={selectedSystem?.id || null}
+            forceNew={forceNew}
+            initialGalaxy={(galaxy as any) || (sanitizeLoadedGalaxy(initialGalaxyJson) as any)}
           />
         </div>
         <div className="galaxy-ledger-container">

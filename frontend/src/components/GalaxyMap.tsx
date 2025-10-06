@@ -1,17 +1,19 @@
 import * as d3 from 'd3'
 import React, { useEffect, useRef, useState } from 'react'
 import { GalaxyApiService } from '../services/galaxyApi'
-import { Galaxy, StarSystem, Anomaly, GalaxyConfig } from '../types/galaxy'
+import { Galaxy, StarSystem, GalaxyConfig } from '../types/galaxy'
 import { SystemContextMenu } from './SystemContextMenu'
 
 interface GalaxyMapProps {
   config?: Partial<GalaxyConfig>
-  onSystemClick?: (_system: StarSystem) => void
-  onAnomalyClick?: (_anomaly: Anomaly) => void
-  onGalaxyLoad?: (_galaxy: Galaxy) => void
-  onViewSystem?: (_system: StarSystem) => void
+  onSystemClick?: Function
+  onAnomalyClick?: Function
+  onGalaxyLoad?: Function
+  onViewSystem?: Function
   selectedSystemId?: string | null
   className?: string
+  forceNew?: boolean
+  initialGalaxy?: Galaxy | null
 }
 
 export const GalaxyMap: React.FC<GalaxyMapProps> = ({
@@ -22,12 +24,17 @@ export const GalaxyMap: React.FC<GalaxyMapProps> = ({
   onViewSystem,
   selectedSystemId,
   className = '',
+  forceNew = false,
+  initialGalaxy = null,
 }) => {
   const svgRef = useRef<SVGSVGElement>(null)
   const zoomRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null)
-  const [galaxy, setGalaxy] = useState<Galaxy | null>(null)
+  const zoomTransformRef = useRef<d3.ZoomTransform>(d3.zoomIdentity)
+  const isUserInteractingRef = useRef<boolean>(false)
+  const lastCenteredIdRef = useRef<string | null>(null)
+  const [galaxy, setGalaxy] = useState<Galaxy | null>(initialGalaxy)
   const [selectedSystem, setSelectedSystem] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(!initialGalaxy)
   const [error, setError] = useState<string | null>(null)
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 })
   const [contextMenu, setContextMenu] = useState<{
@@ -35,28 +42,56 @@ export const GalaxyMap: React.FC<GalaxyMapProps> = ({
     position: { x: number; y: number }
   } | null>(null)
 
-  // Generate galaxy when config changes
+  // Load saved state or generate new depending on forceNew
   useEffect(() => {
-    const generateGalaxy = async () => {
+    if (initialGalaxy) {
+      setGalaxy(initialGalaxy)
+      setLoading(false)
+      setError(null)
+      onGalaxyLoad?.(initialGalaxy)
+      return
+    }
+    let cancelled = false
+    const loadOrGenerate = async () => {
       try {
         setLoading(true)
         setError(null)
 
-        // Use API service to generate galaxy
-        const newGalaxy = await GalaxyApiService.generateGalaxy(config)
+        // If forceNew, skip checking saved state
+        if (!forceNew) {
+          try {
+            const saved = await GalaxyApiService.getSavedState()
+            if (!cancelled && saved) {
+              setGalaxy(saved)
+              onGalaxyLoad?.(saved)
+              return
+            }
+          } catch {
+            // ignore saved-state fetch errors; fall through to generate
+          }
+        }
 
-        setGalaxy(newGalaxy)
-        onGalaxyLoad?.(newGalaxy)
+        // Otherwise generate
+        const requestBody = forceNew ? { ...config, use_saved: false } : config
+        const newGalaxy = await GalaxyApiService.generateGalaxy(requestBody)
+        if (!cancelled) {
+          setGalaxy(newGalaxy)
+          onGalaxyLoad?.(newGalaxy)
+        }
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to generate galaxy')
-        console.error('Galaxy generation error:', err)
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'Failed to generate galaxy')
+        }
       } finally {
-        setLoading(false)
+        if (!cancelled) setLoading(false)
       }
     }
 
-    generateGalaxy()
-  }, [config, onGalaxyLoad])
+    loadOrGenerate()
+    return () => {
+      cancelled = true
+    }
+  }, [config, onGalaxyLoad, forceNew, initialGalaxy])
 
   // Handle window resize
   useEffect(() => {
@@ -77,7 +112,7 @@ export const GalaxyMap: React.FC<GalaxyMapProps> = ({
     return () => window.removeEventListener('resize', handleResize)
   }, [galaxy])
 
-  // Render D3 visualization when galaxy changes
+  // Render D3 visualization when galaxy or dimensions change (not on selection)
   useEffect(() => {
     if (!galaxy || !svgRef.current || !galaxy.config?.visualization || dimensions.width === 0)
       return
@@ -109,18 +144,42 @@ export const GalaxyMap: React.FC<GalaxyMapProps> = ({
 
     // Create main group for zoom/pan
     const mainGroup = svg.append('g').attr('class', 'main-group')
+    // Apply any previously saved transform BEFORE drawing to avoid center flash
+    mainGroup.attr('transform', zoomTransformRef.current.toString())
 
     // Add zoom behavior with no boundary constraints - free exploration
     const zoom = d3
       .zoom<SVGSVGElement, unknown>()
       .scaleExtent([0.1, 10])
+      .on('start', () => {
+        isUserInteractingRef.current = true
+      })
       .on('zoom', event => {
+        zoomTransformRef.current = event.transform
         mainGroup.attr('transform', event.transform)
+      })
+      .on('end', () => {
+        isUserInteractingRef.current = false
       })
 
     // Store zoom behavior reference for later use
     zoomRef.current = zoom
     svg.call(zoom)
+
+    // Reapply previous zoom/pan to preserve view between renders
+    // Casting to any to satisfy d3 typing for call with transform
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(svg as any).call(zoom.transform, zoomTransformRef.current)
+
+    // Ensure there is a full-size invisible background to capture drag events
+    mainGroup
+      .append('rect')
+      .attr('class', 'drag-capture')
+      .attr('x', 0)
+      .attr('y', 0)
+      .attr('width', width)
+      .attr('height', height)
+      .attr('fill', 'transparent')
 
     // Draw galaxy boundary circle
     mainGroup
@@ -204,15 +263,6 @@ export const GalaxyMap: React.FC<GalaxyMapProps> = ({
         d3.select(this)
           .attr('stroke-width', d.discovered ? 4 : 3)
           .attr('opacity', 1)
-
-        // Show tooltip
-        const fromSystem = galaxy.systems.find(s => s.id === d.from)
-        const toSystem = galaxy.systems.find(s => s.id === d.to)
-        if (fromSystem && toSystem) {
-          console.log(
-            `Warp Lane: ${fromSystem.name} ↔ ${toSystem.name} (${d.distance.toFixed(1)} LY)`
-          )
-        }
       })
       .on('mouseout', function (event, d) {
         d3.select(this)
@@ -301,12 +351,8 @@ export const GalaxyMap: React.FC<GalaxyMapProps> = ({
       .attr('cy', d => yScale(d.y))
       .attr('r', d => systemSizes[d.type])
       .attr('fill', d => systemColors[d.type])
-      .attr('stroke', d => {
-        if (selectedSystem === d.id) return '#fff'
-        if (d.explored) return '#fff'
-        return 'none'
-      })
-      .attr('stroke-width', d => (selectedSystem === d.id ? 3 : 1))
+      .attr('stroke', d => (d.explored ? '#fff' : 'none'))
+      .attr('stroke-width', 1)
       .attr('opacity', d => (d.explored ? 1.0 : 0.7))
       .style('cursor', 'pointer')
       .on('click', (event, d) => {
@@ -356,8 +402,8 @@ export const GalaxyMap: React.FC<GalaxyMapProps> = ({
       .on('mouseout', function (event, d) {
         d3.select(this)
           .attr('r', systemSizes[d.type])
-          .attr('stroke', selectedSystem === d.id ? '#fff' : d.explored ? '#fff' : 'none')
-          .attr('stroke-width', selectedSystem === d.id ? 3 : 1)
+          .attr('stroke', d.explored ? '#fff' : 'none')
+          .attr('stroke-width', 1)
 
         d3.selectAll('.galaxy-tooltip').remove()
       })
@@ -449,9 +495,22 @@ export const GalaxyMap: React.FC<GalaxyMapProps> = ({
       .attr('fill', '#ccc')
       .attr('font-size', '12px')
       .text(`${galaxy.warpLanes.length} warp lanes, ${galaxy.config.radius} LY radius`)
-  }, [galaxy, selectedSystem, onSystemClick, _onAnomalyClick, dimensions])
+  }, [galaxy, dimensions])
 
-  // Handle centering on selected system from ledger
+  // Update selection highlight without rebuilding the scene
+  useEffect(() => {
+    if (!svgRef.current) return
+    const svg = d3.select(svgRef.current)
+    const circles = svg.selectAll<d3.BaseType, StarSystem>('.star-systems circle')
+    circles
+      .attr('stroke', (d: StarSystem) => {
+        if (selectedSystem === d.id) return '#fff'
+        return d.explored ? '#fff' : 'none'
+      })
+      .attr('stroke-width', (d: StarSystem) => (selectedSystem === d.id ? 3 : 1))
+  }, [selectedSystem])
+
+  // Handle centering on selected system from ledger (only when transform actually needs to change)
   useEffect(() => {
     if (!galaxy || !selectedSystemId || !svgRef.current || !zoomRef.current) return
 
@@ -481,21 +540,39 @@ export const GalaxyMap: React.FC<GalaxyMapProps> = ({
     const centerX = width / 2
     const centerY = height / 2
 
-    // Set zoom scale and calculate transform
-    const zoomScale = 2
+    // Set zoom scale and calculate transform (at least 2x, or keep current if higher)
+    const zoomScale = Math.max(2, zoomTransformRef.current.k)
 
     // Debug info (can be removed in production)
     // console.log(`Centering on ${system.name} at (${system.x}, ${system.y})`)
 
     // Apply zoom with smooth transition using the stored zoom behavior
     // Use D3's transform.translate and scale methods for proper composition
+    const targetTransform = d3.zoomIdentity
+      .translate(centerX, centerY)
+      .scale(zoomScale)
+      .translate(-systemX, -systemY)
+
+    // If we're already effectively at the target transform, skip
+    const current = zoomTransformRef.current
+    const approxEqual = (a: number, b: number) => Math.abs(a - b) < 0.5
+    if (
+      approxEqual(current.k, targetTransform.k) &&
+      approxEqual(current.x, targetTransform.x) &&
+      approxEqual(current.y, targetTransform.y)
+    ) {
+      lastCenteredIdRef.current = selectedSystemId
+      return
+    }
+
     svg
       .transition()
       .duration(750)
-      .call(
-        zoomRef.current.transform,
-        d3.zoomIdentity.translate(centerX, centerY).scale(zoomScale).translate(-systemX, -systemY)
-      )
+      .call(zoomRef.current.transform, targetTransform)
+      .on('end', () => {
+        zoomTransformRef.current = targetTransform
+        lastCenteredIdRef.current = selectedSystemId
+      })
   }, [selectedSystemId, galaxy, dimensions])
 
   if (loading) {

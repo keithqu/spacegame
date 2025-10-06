@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
-import { StarSystem, Galaxy, DetailedSystemData } from '../types/galaxy'
 import { GalaxyApiService } from '../services/galaxyApi'
+import { StarSystem, Galaxy, DetailedSystemData } from '../types/galaxy'
 
 interface SystemLedgerProps {
   system: StarSystem
@@ -44,12 +44,18 @@ export const SystemLedger: React.FC<SystemLedgerProps> = ({
 
   const formatNumber = (num: number) => {
     if (num >= 1000000) {
-      return (num / 1000000).toFixed(1) + 'M'
+      return `${(num / 1000000).toFixed(1)}M`
     } else if (num >= 1000) {
-      return (num / 1000).toFixed(1) + 'K'
+      return `${(num / 1000).toFixed(1)}K`
     }
     return num.toString()
   }
+
+  const starType = detailedSystemData?.starType || system.systemInfo?.starType || 'Unknown'
+  const planetCount = detailedSystemData?.planets?.length ?? system.systemInfo?.planetCount ?? 0
+  const moonCount = detailedSystemData
+    ? detailedSystemData.planets.reduce((sum, p) => sum + (p.moons?.length || 0), 0)
+    : system.systemInfo?.moonCount || 0
 
   return (
     <div className="system-ledger">
@@ -58,11 +64,11 @@ export const SystemLedger: React.FC<SystemLedgerProps> = ({
         <h3>{system.name}</h3>
         <div className="system-stats">
           <div className="stat">
-            <div className="stat-value">{system.systemInfo?.planetCount || 0}</div>
+            <div className="stat-value">{planetCount}</div>
             <div className="stat-label">Planets</div>
           </div>
           <div className="stat">
-            <div className="stat-value">{system.systemInfo?.moonCount || 0}</div>
+            <div className="stat-value">{moonCount}</div>
             <div className="stat-label">Moons</div>
           </div>
           <div className="stat">
@@ -103,7 +109,7 @@ export const SystemLedger: React.FC<SystemLedgerProps> = ({
               <div className="info-grid">
                 <div className="info-item">
                   <span className="label">Star Type:</span>
-                  <span className="value">{system.systemInfo?.starType || 'Unknown'}</span>
+                  <span className="value">{starType}</span>
                 </div>
                 <div className="info-item">
                   <span className="label">Population:</span>
